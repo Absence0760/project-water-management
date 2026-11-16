@@ -95,12 +95,29 @@
 # S3-free SQS endpoint statement (jobs.tf) and the worker's FEED_FETCHER /
 # FETCH_REQUESTS_QUEUE_URL are not created. The fetcher itself stays, for its
 # scheduled modes. Flipping either flag back and applying brings them back.
+#
+# Station API feeds (issue #784; docs/security.md § Station API feeds): with
+# station_api_feeds on, per-feed fetching stays on after the cutover, since a
+# station's own API can't be read from our copy. The fetcher then also gets
+# its own runtime secret (secrets.tf) holding the X25519 key that opens the
+# feeds' sealed credentials, which reach it unopened in the fetch request.
+# It fetches owner-given URLs through a guarded client
+# (backend/src/feeds/stationHttp.ts): https on 443 only, every address DNS
+# returns checked against private, loopback, link-local, CGNAT and reserved
+# ranges at connect time. That check is the guard, not the network: outside
+# a VPC the fetcher reaches only the internet anyway, and in the egress VPC
+# (fixed_egress_enabled) the NAT instance's own VPC addresses are private
+# ones the client refuses. No HTTPS_PROXY / NODE_USE_ENV_PROXY is ever set
+# here: a proxy would resolve the name itself, past the guard's pinned
+# lookup (infra/tests/cutover.tftest.hcl checks).
 # ----------------------------------------------------------------------------
 
 locals {
   # Whether any feed still fetches through the fetcher (the queues below):
-  # until both CHIRPS and DWS read our copy and store (issue #604 R3-C).
-  per_feed_fetching = !(var.chirps_source == "mirror" && var.dws_source == "store")
+  # until both CHIRPS and DWS read our copy and store (issue #604 R3-C), and
+  # always while station API feeds are on (issue #784): a station's own API
+  # can't be read from our copy.
+  per_feed_fetching = var.station_api_feeds || !(var.chirps_source == "mirror" && var.dws_source == "store")
   per_feed_count    = local.per_feed_fetching ? 1 : 0
 
   # At about a request a second a CHIRPS day is 3–10 requests for one cell,
@@ -295,7 +312,19 @@ resource "aws_lambda_function" "fetcher" {
         MIRROR_URL = "s3://${aws_s3_bucket.mirror.bucket}"
         # The contact in the user agent CHC asked for (backend/src/feeds/http.ts userAgent).
         FEEDS_CONTACT = var.feeds_contact
+        # Station API feeds (issue #784): on, the fetcher loads its runtime
+        # secret (below) and opens each feed's sealed credential; the public
+        # key lets it check at cold start that its private key pairs with it.
+        STATION_API_FEEDS          = var.station_api_feeds ? "on" : "off"
+        FEED_CREDENTIAL_PUBLIC_KEY = var.feed_credential_public_key
       },
+      # Its runtime secret (secrets.tf), only while station API feeds are on:
+      # the key itself is never in this block, which any
+      # GetFunctionConfiguration caller can read.
+      var.station_api_feeds ? {
+        RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["fetcher"].arn
+        RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["fetcher"].version_id
+      } : {},
       # The dams-weekly run's Sentinel-2 and Sentinel-1 passes (dam_observations.tf local.dam_s2_on, local.dam_s1_mode,
       # issue #624), only while the dam observations are on.
       local.dams_enabled ? {
@@ -314,6 +343,7 @@ resource "aws_lambda_function" "fetcher" {
     aws_iam_role_policy.lambda_logs["fetcher"],
     aws_iam_role_policy.fetcher_lambda,
     aws_iam_role_policy.lambda_vpc_eni,
+    aws_iam_role_policy.runtime_secret,
   ]
 
   lifecycle {

@@ -7,6 +7,12 @@
 # value, and goes only with chirps_source = "mirror" and dws_source = "store".
 # The fetcher itself stays either way, for its scheduled modes.
 #
+# Station API feeds (issue #784): with station_api_feeds on, per-feed fetching
+# stays after the cutover (a station's own API can't be read from our copy),
+# and the fetcher gets its own runtime secret, the credential-opening key, with
+# GetSecretValue on exactly that secret; the API gets the public key. Off (the
+# default), the fetcher holds no secret.
+#
 # The mocks, overrides and variables below are copied from
 # chirps_source.tftest.hcl (a test file can't share them); keep them in step.
 #
@@ -619,6 +625,24 @@ override_resource {
   }
 }
 
+# The fetcher's, only with station_api_feeds on (secrets.tf).
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["fetcher"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/fetcher-FfFfFf"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/fetcher-FfFfFf"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["fetcher"]
+  override_during = plan
+  values = {
+    version_id = "ffffffff-0000-0000-0000-000000000006"
+  }
+}
+
 # A known CloudFront header, for the ephemerality check's positive control.
 override_resource {
   target          = random_password.cloudfront_shared_secret
@@ -877,4 +901,173 @@ run "cutover_with_essential_alarms" {
     )
     error_message = "The essential tier loses the two feed-queue DLQ alarms after the cutover, and keeps the rest (the jobs DLQ's, positive control)."
   }
+}
+
+# ---------------------------------------------------------------------------
+# Station API feeds (issue #784)
+# ---------------------------------------------------------------------------
+
+run "station_api_feeds_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(keys(aws_secretsmanager_secret.runtime), "fetcher") &&
+      !contains(keys(aws_iam_role_policy.runtime_secret), "fetcher") &&
+      !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "RUNTIME_SECRET_ARN") &&
+      !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "RUNTIME_SECRET_VERSION")
+    )
+    error_message = "Without station API feeds the fetcher has no runtime secret, no grant on one, and names none."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["STATION_API_FEEDS"] == "off" &&
+      aws_lambda_function.worker.environment[0].variables["STATION_API_FEEDS"] == "off" &&
+      aws_lambda_function.fetcher.environment[0].variables["STATION_API_FEEDS"] == "off" &&
+      aws_lambda_function.backend.environment[0].variables["FEED_CREDENTIAL_PUBLIC_KEY"] == ""
+    )
+    error_message = "Station API feeds are off on the API, the worker and the fetcher by default, with no public key."
+  }
+  # Positive control for the run below: the other three secrets are there.
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret.runtime)) == toset(["api", "worker", "migrate"])
+    error_message = "The API, worker and migrate secrets exist either way."
+  }
+}
+
+run "station_api_feeds_keep_per_feed_fetching_after_the_cutover" {
+  command = plan
+
+  variables {
+    chirps_source               = "mirror"
+    dws_source                  = "store"
+    station_api_feeds           = true
+    feed_credential_public_key  = "synthetic-feed-public-key-0000000000000000A"
+    feed_credential_private_key = "synthetic-feed-private-key-000000000000000A"
+  }
+
+  # The queues, triggers and the worker's hand-off stay: the station's API is fetched by the fetcher.
+  assert {
+    condition = (
+      length(aws_sqs_queue.fetch_requests) == 1 && length(aws_sqs_queue.ingest_results) == 1 &&
+      length(aws_lambda_event_source_mapping.fetcher_requests) == 1 &&
+      length(aws_lambda_event_source_mapping.worker_ingest_results) == 1 &&
+      aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests[0].url &&
+      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results[0].url
+    )
+    error_message = "With station API feeds on, per-feed fetching stays after the cutover: both queues, both triggers, the worker's FEED_FETCHER=sqs and the fetcher's answer queue."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["STATION_API_FEEDS"] == "on" &&
+      aws_lambda_function.worker.environment[0].variables["STATION_API_FEEDS"] == "on" &&
+      aws_lambda_function.fetcher.environment[0].variables["STATION_API_FEEDS"] == "on" &&
+      aws_lambda_function.backend.environment[0].variables["FEED_CREDENTIAL_PUBLIC_KEY"] == var.feed_credential_public_key &&
+      aws_lambda_function.fetcher.environment[0].variables["FEED_CREDENTIAL_PUBLIC_KEY"] == var.feed_credential_public_key
+    )
+    error_message = "On: STATION_API_FEEDS=on on the API, the worker and the fetcher, and the public key on the API (it seals) and the fetcher (its pairing check)."
+  }
+
+  # The fetcher's own runtime secret: the private key alone, written write-only, named by ARN and version.
+  assert {
+    condition = (
+      toset(keys(local.runtime_secrets.fetcher)) == toset(["FEED_CREDENTIAL_PRIVATE_KEY"]) &&
+      local.runtime_secrets.fetcher.FEED_CREDENTIAL_PRIVATE_KEY == var.feed_credential_private_key &&
+      ephemeralasnull(local.runtime_secrets.fetcher.FEED_CREDENTIAL_PRIVATE_KEY) == null &&
+      aws_secretsmanager_secret.runtime["fetcher"].name == "water-management/runtime/fetcher" &&
+      aws_secretsmanager_secret_version.runtime["fetcher"].secret_string == null &&
+      aws_secretsmanager_secret_version.runtime["fetcher"].secret_string_wo_version == var.runtime_secret_version
+    )
+    error_message = "The fetcher's runtime secret holds exactly FEED_CREDENTIAL_PRIVATE_KEY from its ephemeral sops variable, written write-only."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["fetcher"].arn &&
+      aws_lambda_function.fetcher.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["fetcher"].version_id
+    )
+    error_message = "The fetcher names its own runtime secret and the version Terraform wrote."
+  }
+  # The key itself is in no environment block.
+  assert {
+    condition = alltrue(flatten([
+      for f in [aws_lambda_function.backend, aws_lambda_function.worker, aws_lambda_function.fetcher] : [
+        for k in keys(f.environment[0].variables) : !can(regex("PRIVATE_KEY", k))
+      ]
+    ]))
+    error_message = "No environment block holds the credential-opening key: it is the fetcher's runtime secret alone."
+  }
+  # No proxy can route around the station client's pinned, checked lookup.
+  assert {
+    condition = alltrue([
+      for k in keys(aws_lambda_function.fetcher.environment[0].variables) : !contains(["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy", "NODE_USE_ENV_PROXY", "NO_PROXY", "NODE_OPTIONS"], k)
+    ])
+    error_message = "The fetcher sets no proxy (a proxy resolves the name itself, past the station client's pinned, checked lookup) and no NODE_OPTIONS."
+  }
+
+  # IAM: GetSecretValue on its own secret only, on its own role; the worker's grant stays its own.
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.runtime_secret["fetcher"].statement) == 1 &&
+      toset(data.aws_iam_policy_document.runtime_secret["fetcher"].statement[0].actions) == toset(["secretsmanager:GetSecretValue"]) &&
+      toset(data.aws_iam_policy_document.runtime_secret["fetcher"].statement[0].resources) == toset([aws_secretsmanager_secret.runtime["fetcher"].arn]) &&
+      aws_iam_role_policy.runtime_secret["fetcher"].role == aws_iam_role.fetcher_lambda.id &&
+      aws_iam_role_policy.runtime_secret["worker"].role == aws_iam_role.worker_lambda.id
+    )
+    error_message = "The fetcher may read its own runtime secret, and nothing else; the worker's grant stays on the worker's role."
+  }
+  assert {
+    condition     = length(toset([for s in aws_secretsmanager_secret.runtime : s.arn])) == 4
+    error_message = "Positive control: four distinct secret ARNs, so matching the fetcher's grant to its own secret can fail."
+  }
+}
+
+run "station_api_feeds_before_the_rain_copy_cutover" {
+  command = plan
+
+  variables {
+    station_api_feeds           = true
+    feed_credential_public_key  = "synthetic-feed-public-key-0000000000000000A"
+    feed_credential_private_key = "synthetic-feed-private-key-000000000000000A"
+  }
+
+  assert {
+    condition     = length(aws_sqs_queue.fetch_requests) == 1 && contains(keys(aws_secretsmanager_secret.runtime), "fetcher")
+    error_message = "Before the cutover too, station API feeds keep the queues and give the fetcher its secret."
+  }
+}
+
+run "station_api_feeds_need_both_keys" {
+  command = plan
+
+  variables {
+    station_api_feeds          = true
+    feed_credential_public_key = "synthetic-feed-public-key-0000000000000000A"
+  }
+
+  expect_failures = [var.station_api_feeds]
+}
+
+run "rejects_the_committed_dev_public_key" {
+  command = plan
+
+  variables {
+    station_api_feeds           = true
+    feed_credential_public_key  = "g-xo1mrWk9kZ42VUSOO8eMbk5xQjlQ3GlXFzlFjcKCs"
+    feed_credential_private_key = "synthetic-feed-private-key-000000000000000A"
+  }
+
+  expect_failures = [var.feed_credential_public_key]
+}
+
+run "rejects_a_malformed_private_key" {
+  command = plan
+
+  variables {
+    station_api_feeds           = true
+    feed_credential_public_key  = "synthetic-feed-public-key-0000000000000000A"
+    feed_credential_private_key = "-----BEGIN PRIVATE KEY-----"
+  }
+
+  expect_failures = [var.feed_credential_private_key]
 }

@@ -204,6 +204,11 @@ resource "aws_lambda_function" "worker" {
         # loads what the pass fetched (feeds.tf, DWS_WEEKLY).
         DWS_SOURCE = var.dws_source
         DWS_WEEKLY = var.dws_weekly_enabled ? "on" : "off"
+        # Station API feeds (issue #784): on keeps FEED_FETCHER=sqs after the
+        # cutover (feeds.tf local.per_feed_fetching). The worker forwards each
+        # feed's sealed credential to the fetcher unopened: it never holds the
+        # key that opens one (secrets.tf).
+        STATION_API_FEEDS = var.station_api_feeds ? "on" : "off"
         # The dams tick (issue #604 R5, dam_observations.tf): matches traced dams,
         # writes dams/wanted.json and loads what the passes fetched.
         DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"
@@ -245,7 +250,8 @@ resource "aws_lambda_function" "worker" {
         DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
       },
       # Per-feed fetching (feeds.tf local.per_feed_fetching): until CHIRPS reads
-      # the copy and DWS the store, a CHC or DWS fetch goes to the fetcher.
+      # the copy and DWS the store, a CHC or DWS fetch goes to the fetcher, and
+      # a station API feed's always does.
       local.per_feed_fetching ? {
         FEED_FETCHER             = "sqs"
         FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.fetch_requests[*].url)

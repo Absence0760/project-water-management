@@ -2,7 +2,7 @@
 // secret once, fails closed, and never lets a value into an error or a log.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ROLES, SETTINGS } from './production.js';
-import { loadRuntimeSecrets, RUNTIME_SECRETS, RuntimeSecretError } from './runtimeSecrets.js';
+import { loadRuntimeSecrets, RUNTIME_SECRETS, RuntimeSecretError, runtimeSecretKeys } from './runtimeSecrets.js';
 
 const ARN = 'arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AbCdEf';
 const VALUES = {
@@ -59,10 +59,31 @@ describe('loadRuntimeSecrets', () => {
 		expect(env.AUTH_JWT_SECRET).toBeUndefined();
 	});
 
-	it('a Lambda with no secrets (fetcher, renderer) reads nothing', async () => {
+	it('a Lambda with no secrets reads nothing: the renderer, and the fetcher while station API feeds are off', async () => {
 		const fetch = serve({});
-		for (const role of ['fetcher', 'renderer'] as const) await loadRuntimeSecrets(role, lambdaEnv(), fetch);
+		await loadRuntimeSecrets('renderer', lambdaEnv(), fetch);
+		for (const v of [undefined, '', 'off']) await loadRuntimeSecrets('fetcher', lambdaEnv({ STATION_API_FEEDS: v, RUNTIME_SECRET_ARN: undefined }), fetch);
 		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('the fetcher reads its private key only with STATION_API_FEEDS=on, and then fails closed like any role', async () => {
+		const key = { FEED_CREDENTIAL_PRIVATE_KEY: 'feed-key-that-must-never-be-printed-000000' };
+		const env: Record<string, string | undefined> = lambdaEnv({ STATION_API_FEEDS: 'on' });
+		const fetch = serve(key);
+		await loadRuntimeSecrets('fetcher', env, fetch);
+		expect(fetch).toHaveBeenCalledWith(ARN, 'v-1');
+		expect(env.FEED_CREDENTIAL_PRIVATE_KEY).toBe(key.FEED_CREDENTIAL_PRIVATE_KEY);
+		// On, a missing secret refuses to start (never a fetcher that can't open a credential).
+		const err = await loadRuntimeSecrets('fetcher', lambdaEnv({ STATION_API_FEEDS: 'on', RUNTIME_SECRET_ARN: undefined }), fetch).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(RuntimeSecretError);
+		expect((err as Error).message).toMatch(/refusing to start the fetcher Lambda: .*RUNTIME_SECRET_ARN/);
+		expect((await loadRuntimeSecrets('fetcher', lambdaEnv({ STATION_API_FEEDS: 'on' }), serve({})).catch((e: unknown) => e)) as Error).toHaveProperty(
+			'message',
+			expect.stringMatching(/missing keys: FEED_CREDENTIAL_PRIVATE_KEY/)
+		);
+		expect(runtimeSecretKeys('fetcher', { STATION_API_FEEDS: 'on' })).toEqual(['FEED_CREDENTIAL_PRIVATE_KEY']);
+		expect(runtimeSecretKeys('fetcher', {})).toEqual([]);
+		expect(runtimeSecretKeys('api', {})).toEqual(RUNTIME_SECRETS.api); // positive control: no switch on the API's keys
 	});
 
 	it('refuses a missing key, naming it', async () => {
@@ -125,5 +146,10 @@ describe('RUNTIME_SECRETS', () => {
 		expect(RUNTIME_SECRETS.worker).toContain('ALERTS_TOKEN_SECRET');
 		expect(RUNTIME_SECRETS.api).not.toContain('ALERTS_TOKEN_SECRET');
 		expect(RUNTIME_SECRETS.migrate).toEqual(['WATER_APP_PASSWORD']);
+	});
+
+	it('only the fetcher holds the key that opens station API credentials: never the worker (it forwards them sealed) or the API (it only seals)', () => {
+		expect(RUNTIME_SECRETS.fetcher).toEqual(['FEED_CREDENTIAL_PRIVATE_KEY']);
+		for (const role of ROLES.filter((r) => r !== 'fetcher')) expect(RUNTIME_SECRETS[role], role).not.toContain('FEED_CREDENTIAL_PRIVATE_KEY');
 	});
 });

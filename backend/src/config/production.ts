@@ -128,16 +128,66 @@ const mirrorUrlFor: Check = (v, env) =>
 		? s3Url(v)
 		: optional(s3Url)(v);
 
+/** Whether station API feeds are on (STATION_API_FEEDS=on, Terraform var.station_api_feeds; issue #784). */
+const stationApiFeedsOn = (env?: Env) => env?.STATION_API_FEEDS?.trim() === 'on';
+
 /**
- * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
- * and DWS_SOURCE=store): then no fetch goes to the fetcher, and Terraform
+ * Whether no feed fetches through the fetcher: CHIRPS reads our copy and DWS
+ * our store (CHIRPS_SOURCE=mirror and DWS_SOURCE=store), and station API
+ * feeds are off (a station's own API can't be read from a copy, so with
+ * STATION_API_FEEDS=on its fetches always go to the fetcher). Then Terraform
  * creates no fetch-requests queue (infra/feeds.tf local.per_feed_fetching).
  */
-const perFeedFetchingOff = (env?: Env) => env?.CHIRPS_SOURCE?.trim() === 'mirror' && env?.DWS_SOURCE?.trim() === 'store';
+const perFeedFetchingOff = (env?: Env) => env?.CHIRPS_SOURCE?.trim() === 'mirror' && env?.DWS_SOURCE?.trim() === 'store' && !stationApiFeedsOn(env);
 
 /** FEED_FETCHER on the worker: sqs while any feed still fetches through the fetcher; unset only once none does (it then never sends). */
 const feedFetcherFor: Check = (v, env) =>
-	set(v) ? oneOf('sqs')(v) : perFeedFetchingOff(env) ? null : 'is not set (production needs sqs while CHIRPS_SOURCE=chc or DWS_SOURCE=live)';
+	set(v) ? oneOf('sqs')(v) : perFeedFetchingOff(env) ? null : 'is not set (production needs sqs while CHIRPS_SOURCE=chc, DWS_SOURCE=live or STATION_API_FEEDS=on)';
+
+/**
+ * A setting the fetcher needs only for station API feeds: checked in full when
+ * STATION_API_FEEDS=on (and without an env, so the guard test counts it as
+ * required and Terraform must set it), else only when set.
+ */
+const whenStationApiFeeds =
+	(check: Check): Check =>
+	(v, env) =>
+		env === undefined || stationApiFeedsOn(env) ? check(v) : optional(check)(v);
+
+/**
+ * The public X25519 key station API credentials are sealed to (feeds/credential.ts): 32 bytes, base64url
+ * (43 characters, no padding), as pnpm gen:feed-credential-key prints it.
+ */
+const X25519_KEY = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+/**
+ * The public halves of the committed dev and test pairs (backend/.env.development; the private halves decode to
+ * dev-only-… text). Their private halves are in this public repo, so sealing to one in production would let
+ * anyone open every credential. production.security.test.ts derives each from its private half, so the list
+ * can't go stale.
+ */
+export const COMMITTED_FEED_CREDENTIAL_PUBLIC_KEYS: readonly string[] = ['g-xo1mrWk9kZ42VUSOO8eMbk5xQjlQ3GlXFzlFjcKCs'];
+const feedCredentialPublicKey: Check = (v) => {
+	if (!set(v)) return 'is not set (pnpm gen:feed-credential-key)';
+	const t = v.trim();
+	if (!X25519_KEY.test(t)) return 'is not a 32-byte base64url key (pnpm gen:feed-credential-key)';
+	if (COMMITTED_FEED_CREDENTIAL_PUBLIC_KEYS.includes(t)) return 'is the committed dev key, whose private half is public';
+	return null;
+};
+/**
+ * The fetcher's private key (its runtime secret): the same shape, and never a committed placeholder. The committed
+ * one is 32 bytes of dev-only-… text, base64url, so it is refused by what it decodes to (atob: this module imports nothing).
+ */
+const feedCredentialPrivateKey: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const t = v.trim();
+	if (!X25519_KEY.test(t)) return 'is not a 32-byte base64url key (pnpm gen:feed-credential-key)';
+	if (PLACEHOLDER.test(atob(t.replace(/-/g, '+').replace(/_/g, '/') + '='))) return 'is a committed dev/test placeholder';
+	return null;
+};
+/** The private key on the fetcher: required with STATION_API_FEEDS=on, and never set without it (no secret Lambda holds unused). */
+const feedCredentialPrivateKeyFor: Check = (v, env) => (env === undefined || stationApiFeedsOn(env) ? feedCredentialPrivateKey(v) : unset(v));
+/** The public key on the API: required with STATION_API_FEEDS=on (the attach route seals with it), checked when set otherwise. */
+const feedCredentialPublicKeyFor: Check = (v, env) => (env === undefined || stationApiFeedsOn(env) ? feedCredentialPublicKey(v) : optional(feedCredentialPublicKey)(v));
 
 /** FETCH_REQUESTS_QUEUE_URL on the worker: required with FEED_FETCHER=sqs (a send to no queue fails every fetch), else checked only when set. */
 const fetchRequestsUrlFor: Check = (v, env) => (env === undefined || env.FEED_FETCHER?.trim() === 'sqs' ? publicHttps(v) : optional(publicHttps)(v));
@@ -305,12 +355,12 @@ export const SETTINGS: Record<string, Setting> = {
 
 	// --- Runtime secrets (config/runtimeSecrets.ts) --------------------------------------
 	RUNTIME_SECRET_ARN: {
-		why: 'The Secrets Manager secret holding this Lambda’s secrets (RUNTIME_SECRETS), read at cold start; the secrets themselves never sit in the environment.',
-		checks: { api: secretsManagerArn, worker: secretsManagerArn, migrate: secretsManagerArn, assistant: secretsManagerArn }
+		why: 'The Secrets Manager secret holding this Lambda’s secrets (RUNTIME_SECRETS), read at cold start; the secrets themselves never sit in the environment. The fetcher has one only while station API feeds are on (STATION_API_FEEDS=on, infra/secrets.tf).',
+		checks: { api: secretsManagerArn, worker: secretsManagerArn, migrate: secretsManagerArn, assistant: secretsManagerArn, fetcher: whenStationApiFeeds(secretsManagerArn) }
 	},
 	RUNTIME_SECRET_VERSION: {
 		why: 'The secret version Terraform last wrote: pins what a cold start reads, and changing it cold-starts every instance onto a rotation.',
-		checks: { api: required, worker: required, migrate: required, assistant: required }
+		checks: { api: required, worker: required, migrate: required, assistant: required, fetcher: whenStationApiFeeds(required) }
 	},
 
 	// --- The database ---------------------------------------------------------------------
@@ -389,8 +439,20 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live'), assistant: oneOf('live') }
 	},
 	INGEST_RESULTS_QUEUE_URL: {
-		why: 'Where the fetcher answers a per-feed fetch request. Terraform sets it only while the queues exist (infra/feeds.tf local.per_feed_fetching, issue #604 R3-C); without them the fetcher has no SQS trigger and runs only its scheduled modes, which never send, so it is checked only when set (a stray request with none still fails loudly: jobs/transport.ts sendToQueue).',
-		checks: { fetcher: optional(publicHttps) }
+		why: 'Where the fetcher answers a per-feed fetch request. Terraform sets it only while the queues exist (infra/feeds.tf local.per_feed_fetching, issue #604 R3-C); without them the fetcher has no SQS trigger and runs only its scheduled modes, which never send, so it is checked only when set (a stray request with none still fails loudly: jobs/transport.ts sendToQueue). With STATION_API_FEEDS=on the queues always exist (a station API feed always fetches through the fetcher), so it is required.',
+		checks: { fetcher: whenStationApiFeeds(publicHttps) }
+	},
+	STATION_API_FEEDS: {
+		why: 'on: owners may attach station API feeds (issue #784; Terraform var.station_api_feeds, off by default). The API reads it to allow the attach route and needs FEED_CREDENTIAL_PUBLIC_KEY; the worker keeps handing fetches to the fetcher (FEED_FETCHER=sqs) even after the rain copy cutover, since a station’s own API can’t be read from our copy (infra/feeds.tf local.per_feed_fetching); the fetcher then loads its runtime secret (config/runtimeSecrets.ts) and needs FEED_CREDENTIAL_PRIVATE_KEY and the ingest-results queue. Unset is off, today’s production behaviour, so a release can go out before the apply that sets it; a value set is checked.',
+		checks: { api: optional(oneOf('on', 'off')), worker: optional(oneOf('on', 'off')), fetcher: optional(oneOf('on', 'off')) }
+	},
+	FEED_CREDENTIAL_PUBLIC_KEY: {
+		why: 'The fetcher’s X25519 public key, which the API seals each station API credential to (feeds/credential.ts sealFeedCredential). Not a secret: it can seal, never open. Terraform var.feed_credential_public_key, from pnpm gen:feed-credential-key. Required on the API with STATION_API_FEEDS=on, and never the committed dev key (its private half is in this public repo). The fetcher gets it too, to check at cold start that its private key pairs with it (a mismatch would fail every station feed).',
+		checks: { api: feedCredentialPublicKeyFor, fetcher: whenStationApiFeeds(feedCredentialPublicKey) }
+	},
+	FEED_CREDENTIAL_PRIVATE_KEY: {
+		why: 'Opens station API credentials (feeds/credential.ts openFeedCredential): the fetcher alone, from its runtime secret (sops feed_credential_private_key, infra/secrets.tf), and only with STATION_API_FEEDS=on. The local worker holds the committed dev key (FEED_FETCHER=inline); the production worker must never hold it (it passes the sealed bytes to the fetcher unopened over the fetch-requests queue), nor the API, which only seals.',
+		checks: { fetcher: feedCredentialPrivateKeyFor, worker: unset, api: unset }
 	},
 	CHIRPS_SOURCE: {
 		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live, which production checks), so unset is today’s production behaviour: a release that reads it can go out before the terraform apply that sets it (from var.chirps_source, infra/jobs.tf, infra/lambda.tf) without refusing to start. A value set is checked.',
