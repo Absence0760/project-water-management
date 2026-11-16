@@ -4215,9 +4215,12 @@ readable by anyone. The rules:
   dev default names must be local, and the dev-only placeholders must stay
   placeholders.
 - **gitleaks** runs as a pre-commit hook (through `.githooks/` when
-  `pre-commit` is on PATH, above; never `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
-  weekly over the whole history (`gitleaks-sweep.yml`, which opens a
-  `secret-scan` issue when it fails). Reviewed false positives are
+  `pre-commit` is on PATH, above; never `--no-verify`). In CI, TruffleHog
+  (`secret-scan.yml`) scans every push and PR (ci.yml `secret-scan`, part of
+  the `CI gate`) and, weekly, the whole history (`secret-scan-sweep.yml`,
+  which opens a `secret-scan` issue when it fails); a verified or unknown
+  finding fails it, and a reviewed unverified false positive gets a
+  `trufflehog:ignore` comment on its line. For the gitleaks hook, reviewed false positives are
   allowlisted by their exact value in `.gitleaks.toml` (m³/day field names,
   fake test tokens, the mocked-provider Terraform tests' synthetic secrets),
   never by path; add one only after checking the match isn't real.

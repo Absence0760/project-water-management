@@ -30,6 +30,11 @@ redirect_domains = {
 
 github_repo = "Absence0760/project-water-management"
 
+# Org move only (Absence0760/project-mgmt#14): while the bootstrap deploy role
+# trusts both the old and the new owner's subject, name the owner that isn't
+# github_repo's here so oidc.tf's trust check accepts both. Empty otherwise.
+# github_migration_owners = ["<other-owner>"]
+
 # MUST match the slug new-project-account.sh was run with (role <slug>-deploy).
 bootstrap_slug = "water-management"
 

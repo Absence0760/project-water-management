@@ -77,6 +77,24 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_migration_owners" {
+  description = <<-EOT
+    Other GitHub owners whose subject for this same repo the deploy role's
+    trust may also hold, for the duration of an org move only
+    (Absence0760/project-mgmt#14). During the switchover the bootstrap trusts
+    the old and the new owner's subject; list the one that isn't github_repo's
+    owner here so oidc.tf's trust check accepts both. Empty otherwise, which
+    keeps the check at exactly one subject.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for o in var.github_migration_owners : can(regex("^[A-Za-z0-9-]+$", o))])
+    error_message = "github_migration_owners entries are bare GitHub owner logins (no slash, no @id)."
+  }
+}
+
 variable "bootstrap_slug" {
   description = <<-EOT
     Project slug used by the cross-project bootstrap when creating the OIDC

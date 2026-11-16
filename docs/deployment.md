@@ -794,7 +794,7 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `ci.yml` `renderer-image` | `bin/check-renderer-image.sh`: the release's own `docker buildx build` of the renderer image (one `linux/amd64` manifest, no attestations, which Lambda requires), then the Lambda smoke test, so a broken Dockerfile fails here and not at release |
 | `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |
 | `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy config scan of Terraform and the renderer Dockerfile (advisory: HIGH/CRITICAL findings go to the Security tab, never fail the job; accepted ones in [security.md § Accepted IaC findings](./security.md#accepted-iac-findings)) |
-| `ci.yml` `gitleaks` → `gitleaks.yml` | secret scan; runs on docs-only diffs too |
+| `ci.yml` `secret-scan` → `secret-scan.yml` | TruffleHog secret scan; a verified or unknown finding fails it, unverified ones only warn; runs on docs-only diffs too |
 | `ci.yml` `ci-gate` | **the one required check**: fails if any job above failed |
 | `compliance-drift.yml` | only when migrations, `backend/src`, `frontend/src`, a `package.json` or the two docs change; advisory: personal-data columns, outside hosts or telemetry SDKs added without the matching `docs/data-model.md` / `docs/security.md` change (`pnpm check:compliance`) |
 | `security.yml` | CodeQL (JS/TS + Actions) |
@@ -816,7 +816,7 @@ becomes a required check on `main`.
 
 Scheduled: `audit.yml` (weekly `pnpm audit` against the lockfile, with no
 install and no cache; opens an issue),
-`gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
+`secret-scan-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
 issue when it fails), `renderer-apt-snapshot.yml` (weekly age check of the
 renderer image's apt snapshot; opens a `renderer-apt-snapshot` issue past 90
 days, § Reports), `fresh-clone.yml` (weekly `pnpm run setup && pnpm dev` on a
