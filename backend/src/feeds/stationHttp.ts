@@ -40,15 +40,30 @@ export const MAX_HOPS = 3;
 
 export class StationAddressError extends FeedUnavailableError {}
 
+/**
+ * The fixed texts of the client's unavailable failures, each with the short label the fetcher logs as its detail
+ * (lambda-fetcher.ts failureDetail): none names the URL, the station or the key, so the log may carry the label.
+ */
+export const STATION_FAILURES = {
+	unresolved: ['the station API’s host name did not resolve', 'station host unresolved'],
+	private: ['the station API’s host resolves to a private or reserved address, which a feed may not ask', 'station host private'],
+	tooLarge: ['the station API’s answer is larger than a feed reads (8 MB): ask for fewer days a request', 'station answer too large'],
+	timeout: ['the station API didn’t answer in time', 'station timeout'],
+	cutOff: ['the station API’s answer was cut off', 'station answer cut off'],
+	failed: ['the request to the station API failed', 'station request failed'],
+	tooManyHops: ['the station API redirected too many times', 'station redirect loop']
+} as const satisfies Record<string, readonly [string, string]>;
+const F = (k: keyof typeof STATION_FAILURES) => STATION_FAILURES[k][0];
+
 type Lookup = (host: string, opts: { all: true; verbatim: true }, cb: (err: NodeJS.ErrnoException | null, addrs: LookupAddress[]) => void) => void;
 
 /** A lookup for https.request that resolves `host` and refuses it whole when any of its addresses isn't allowed. */
 export function guardedLookup(resolve: Lookup = dnsLookup as unknown as Lookup): LookupFunction {
 	return ((host: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
 		resolve(host, { all: true, verbatim: true }, (err, addrs) => {
-			if (err) return cb(new StationAddressError('the station API’s host name did not resolve'), opts.all ? [] : undefined);
+			if (err) return cb(new StationAddressError(F('unresolved')), opts.all ? [] : undefined);
 			if (!addrs.length || addrs.some((a) => !addressAllowed(a.address))) {
-				return cb(new StationAddressError('the station API’s host resolves to a private or reserved address, which a feed may not ask'), opts.all ? [] : undefined);
+				return cb(new StationAddressError(F('private')), opts.all ? [] : undefined);
 			}
 			if (opts.all) cb(null, addrs);
 			else cb(null, addrs[0]!.address, addrs[0]!.family);
@@ -74,7 +89,7 @@ export interface StationHttp {
 /** The URL a message may name: scheme, host and path, never the query (it may carry the key). */
 export const safeUrl = (u: URL) => `${u.origin}${u.pathname.length > 80 ? `${u.pathname.slice(0, 79)}…` : u.pathname}`;
 
-type Requester = (url: URL, opts: RequestOptions, signal: AbortSignal) => Promise<IncomingMessage>;
+export type Requester = (url: URL, opts: RequestOptions, signal: AbortSignal) => Promise<IncomingMessage>;
 
 const nodeRequester =
 	(lookup: LookupFunction): Requester =>
@@ -90,7 +105,7 @@ async function readCapped(res: IncomingMessage, max: number): Promise<string> {
 	const declared = Number(res.headers['content-length']);
 	if (declared > max) {
 		res.destroy();
-		throw new FeedUnavailableError('the station API’s answer is larger than a feed reads (8 MB): ask for fewer days a request');
+		throw new FeedUnavailableError(F('tooLarge'));
 	}
 	const parts: Buffer[] = [];
 	let total = 0;
@@ -99,13 +114,13 @@ async function readCapped(res: IncomingMessage, max: number): Promise<string> {
 			total += (chunk as Buffer).length;
 			if (total > max) {
 				res.destroy();
-				throw new FeedUnavailableError('the station API’s answer is larger than a feed reads (8 MB): ask for fewer days a request');
+				throw new FeedUnavailableError(F('tooLarge'));
 			}
 			parts.push(chunk as Buffer);
 		}
 	} catch (err) {
 		if (err instanceof FeedUnavailableError) throw err;
-		throw new FeedUnavailableError((err as Error).name === 'AbortError' ? 'the station API didn’t answer in time' : 'the station API’s answer was cut off');
+		throw new FeedUnavailableError((err as Error).name === 'AbortError' ? F('timeout') : F('cutOff'));
 	}
 	return Buffer.concat(parts).toString('utf8');
 }
@@ -140,7 +155,7 @@ export function stationHttp(opts: { requester?: Requester; lookup?: LookupFuncti
 					if (err instanceof FeedUnavailableError) throw err;
 					const cause = (err as { cause?: unknown }).cause;
 					if (cause instanceof FeedUnavailableError) throw cause;
-					throw new FeedUnavailableError((err as Error).name === 'AbortError' ? 'the station API didn’t answer in time' : 'the request to the station API failed');
+					throw new FeedUnavailableError((err as Error).name === 'AbortError' ? F('timeout') : F('failed'));
 				}
 				const status = res.statusCode ?? 0;
 				if (status >= 300 && status <= 399 && status !== 304) {
@@ -150,7 +165,7 @@ export function stationHttp(opts: { requester?: Requester; lookup?: LookupFuncti
 					if (next.origin !== origin) {
 						throw new FeedFormatError(`the URL redirects to another site (${next.origin}): save that site’s URL instead, if you trust it with the key`);
 					}
-					if (hop === MAX_HOPS) throw new FeedUnavailableError('the station API redirected too many times');
+					if (hop === MAX_HOPS) throw new FeedUnavailableError(F('tooManyHops'));
 					target = next;
 					continue;
 				}

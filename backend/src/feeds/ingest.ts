@@ -117,8 +117,10 @@ import {
 	gridCells,
 	isAreaReplace,
 	isForecastSource,
-	SOURCES
+	SOURCES,
+	type StationApiConfig
 } from './config.js';
+import { stationLastDay } from './sources/station.js';
 import { CellsResult, chirpsPendingFrom, CopyCellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
@@ -161,8 +163,19 @@ export const COPY_NEXT_SECONDS = 0;
  * today. Before 296 an `agera5_et0` feed was measured against today, which its
  * window never reaches, so it queued another fetch a minute after every one.
  */
-const caughtUp = (feed: FeedRow, window: FetchWindow) =>
-	window.end >= (feed.source === 'chirps' || feed.source === 'agera5_et0' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
+const caughtUp = (feed: FeedRow, window: FetchWindow) => window.end >= newestPossibleDay(feed);
+
+/**
+ * The newest day a feed's window can end on now, as fetchWindow ends it: yesterday for CHIRPS and reference ET,
+ * today for DWS, and for a station API feed the newest rain day its station can have finished (sources/station.ts
+ * stationLastDay, the same function fetchWindow ends its window with), so a caught-up station feed never queues
+ * another fetch at once (the chain 296 broke for agera5_et0).
+ */
+function newestPossibleDay(feed: FeedRow): string {
+	const today = utcToday();
+	if (feed.source === 'station_api') return stationLastDay((feed.config as StationApiConfig).format, Date.now(), today);
+	return feed.source === 'chirps' || feed.source === 'agera5_et0' ? fromEpochDay(toEpochDay(today) - 1) : today;
+}
 
 async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false): Promise<void> {
 	// `more`: a caught-up CHIRPS feed with re-check work left (stale finals to read, revised days to refresh).
@@ -322,7 +335,7 @@ const withFinal = (meta: Record<string, string | number>, finalThrough: string |
  * answer. Every other feed records none.
  */
 function checkCellsUsed(feed: FeedRow, result: OkResult): { cellsUsed: number | null } | { error: string } {
-	const grid = feed.source === 'dws' ? null : (feed.config as GridConfig);
+	const grid = feed.source === 'dws' || feed.source === 'station_api' ? null : (feed.config as GridConfig);
 	const prev = feed.cellsUsed ?? null;
 	if (!grid?.bbox || !grid.skipNoData) return { cellsUsed: null };
 	const got = result.meta.cellsUsed;

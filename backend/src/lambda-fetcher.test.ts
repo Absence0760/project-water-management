@@ -52,6 +52,7 @@ const {
 	isEtDekadalEvent,
 	S2_BUDGET_SHARE_WITH_S1,
 	scenePassShares,
+	stationWithDeadline,
 	WATERBODIES_BUDGET_SHARE,
 	withDeadline,
 	WOFS_BUDGET_SHARE_WITH_S2
@@ -1016,7 +1017,15 @@ describe('the fetcher bundle', () => {
 		// the row parser it shares with the manual import; imports only calendar.ts).
 		// dams/observed/upstream.ts re-exports the Copernicus credit through the
 		// `/sentinel-credit` subpath (evidence/sentinelCredit.ts: no imports), its one definition.
-		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts', 'packages/engine/src/evidence/sentinelCredit.ts'];
+		// A station API feed (issue #784) reads its answers through the `/station-format` subpath (stationFormat.ts: the
+		// parser it shares with the attach card's preview; imports only calendar.ts).
+		const allowed = [
+			'packages/engine/src/calendar.ts',
+			'packages/engine/src/seriesProvenance.ts',
+			'packages/engine/src/dws.ts',
+			'packages/engine/src/evidence/sentinelCredit.ts',
+			'packages/engine/src/stationFormat.ts'
+		];
 		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
 	});
 });
@@ -1084,5 +1093,72 @@ describe('the fetcher’s et-dekadal mode (issue #623)', () => {
 		expect(await handler({ mode: 'et-dekadal' } as never)).toMatchObject({ stopped: 'paused' });
 		expect(out.mock.calls.some(([l]) => String(l).includes('EtPassCompleted'))).toBe(false);
 		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'et_pass')).toMatchObject({ stopped: 'paused' });
+	});
+});
+
+describe('the fetcher and station API feeds (issue #784)', () => {
+	const station = (over: Record<string, unknown> = {}) => ({
+		source: 'station_api',
+		config: {
+			url: 'https://station.example/v1/daily.json?station={station}&start={start}&end={end}',
+			station: 'ST-001',
+			auth: { kind: 'none' },
+			format: { format: 'json', records: 'data', time: 'date', value: 'rain_mm', timeFormat: 'YYYY-MM-DD', resolution: 'daily' },
+			...over
+		},
+		start: new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10),
+		end: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10),
+		today,
+		feedId: ids.feedId,
+		credential: null
+	});
+	const run = async (request: unknown) => {
+		vi.restoreAllMocks();
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		expect(await handler({ Records: [record('m1', { v: 1, type: 'fetch', ...ids, request })] } as never)).toEqual({ batchItemFailures: [] });
+		const lines = [...warn.mock.calls, ...info.mock.calls].map(([l]) => l as string);
+		return { result: (sent[0]!.message as { result: { ok: boolean; error?: string; values?: unknown[] } }).result, lines };
+	};
+
+	it('answers a station request from the synthetic API (no CHC slot, no network)', async () => {
+		const { result, lines } = await run(station());
+		expect(result).toMatchObject({ ok: true });
+		expect(result.values).toHaveLength(9);
+		expect(lines.join('\n')).not.toContain('station.example');
+	});
+
+	it('logs a missing key as `credential` and a refused one as `key_refused`, never the URL', async () => {
+		const missing = await run(station({ url: 'https://station.example/v1/keyed/daily.json?station={station}&start={start}&end={end}', auth: { kind: 'bearer' } }));
+		expect(missing.result.ok).toBe(false);
+		const m = missing.lines.map((l) => JSON.parse(l)).find((l) => l.event === 'feed_fetch_failed');
+		expect(m).toMatchObject({ source: 'station_api', reason: 'credential', detail: 'no key saved' });
+		sent.length = 0;
+		const refused = await run(station({ url: 'https://station.example/v1/denied?station={station}' }));
+		const r = refused.lines.map((l) => JSON.parse(l)).find((l) => l.event === 'feed_fetch_failed');
+		expect(r).toMatchObject({ reason: 'key_refused', detail: 'HTTP 401' });
+		expect([...missing.lines, ...refused.lines].join('\n')).not.toMatch(/station\.example|keyed|denied/);
+	});
+
+	it('maps the station messages to fixed reasons and labels, and leaves a message naming a site or a field out of the log', () => {
+		const key401 = 'the source refused this server’s requests (HTTP 401): the station’s API refused the saved key, so check it or replace it (Replace key); the feed waits hours before asking again';
+		expect(fetchFailureReason(key401)).toBe('key_refused');
+		expect(failureDetail(key401)).toBe('HTTP 401');
+		expect(fetchFailureReason('the feed’s key can’t be used: the saved key could not be opened: enter it again (Replace key)')).toBe('credential');
+		expect(failureDetail('the feed’s key can’t be used: the saved key could not be opened: enter it again (Replace key)')).toBe('key not opened');
+		expect(failureDetail('the feed’s key can’t be used: something else')).toBeNull();
+		expect(failureDetail('the source is unreachable: the station API answered HTTP 502')).toBe('HTTP 502');
+		expect(failureDetail('the source is unreachable: the station API didn’t answer in time')).toBe('station timeout');
+		expect(failureDetail('the source is unreachable: the station API’s host resolves to a private or reserved address, which a feed may not ask')).toBe('station host private');
+		expect(fetchFailureReason('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBe('format');
+		expect(failureDetail('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBeNull();
+		expect(failureDetail('the source’s data could not be read: the station API’s answer: record 1: the value “x” is not a number')).toBeNull();
+	});
+
+	it('refuses further station requests once the deadline has passed', async () => {
+		const inner = { http: { get: async () => ({ text: '', contentType: null }) }, pacer: null };
+		await expect(stationWithDeadline(inner, Date.now() - 1).http.get({ url: 'https://x.example/', headers: {} })).rejects.toThrow('it did not answer in time');
+		await expect(stationWithDeadline(inner, Date.now() + 60_000).http.get({ url: 'https://x.example/', headers: {} })).resolves.toEqual({ text: '', contentType: null });
 	});
 });

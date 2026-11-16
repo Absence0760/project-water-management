@@ -8,9 +8,14 @@
 // untrusted input and validates it (FetchResult below) before anything merges.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
-import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells } from './config.js';
-import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedNoDataError } from './errors.js';
-import type { FeedHttp } from './http.js';
+import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells, type StationApiConfig } from './config.js';
+import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedKeyError, FeedNoDataError } from './errors.js';
+import { type FeedHttp, feedSourceMode } from './http.js';
+import { FeedCredentialError, openFeedCredential, SEALED_MAX } from './credential.js';
+import { fetchStation, type StationClient, stationClient, stationFirstDay, stationLastDay, stationWindowDays, STATION_DEFAULT_REVISION_DAYS, STATION_KEY_PROBLEMS } from './sources/station.js';
+import { STATION_MAX_REQUESTS } from './config.js';
+import { logEvent } from '../logging/logEvent.js';
+import { safeError, stackFrames } from '../logging/safeError.js';
 import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue, RECHECK_HEAD_DAYS, RECHECK_READ_DAYS } from './cellCache.js';
 import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY } from './config.js';
 import { FILE_TAG_MAX, FILE_TAG_RE } from './http.js';
@@ -87,6 +92,13 @@ export interface FetchRequest {
 	 * before.
 	 */
 	heldThrough?: string;
+	/**
+	 * A station API feed (issue #784): the feed's id, which its sealed key is bound to, and the key as
+	 * data_feed_credential holds it, sealed to the fetcher (feeds/credential.ts), or null when none is saved. Opened
+	 * only in runFetch, by the process that asks the station's API; it crosses the fetch-requests queue sealed.
+	 */
+	feedId?: string;
+	credential?: string | null;
 }
 
 /**
@@ -215,7 +227,7 @@ export function fetchWindow(
 	today: string,
 	readThrough: string | null = null,
 	finalThrough: string | null = null,
-	opts: { copyYears?: number } = {}
+	opts: { copyYears?: number; nowMs?: number } = {}
 ): FetchWindow {
 	const floor = (start: string) => (config.startDate && start < config.startDate ? config.startDate : start);
 	// The last day a window starting on `start` may reach: maxDays on, or for a CHIRPS read of our copy the 31 December
@@ -253,6 +265,8 @@ export function fetchWindow(
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > ET0_MAX_DAYS ? addDays(start, ET0_MAX_DAYS - 1) : end;
 			return { start: start > end ? end : start, end: capped };
 		}
+		case 'station_api':
+			return stationWindow(config as StationApiConfig, lastDataDate, today, readThrough, opts.nowMs ?? Date.now());
 		case 'dws': {
 			// After `mark` (the newest day, or the last day read): the day after it,
 			// or, when a window from there would reach today, up to a year before
@@ -270,6 +284,37 @@ export function fetchWindow(
 			return { start, end: limit < today ? limit : today };
 		}
 	}
+}
+
+/**
+ * A station API feed's window (issue #784). Its end is the newest rain day the station can have finished
+ * (sources/station.ts stationLastDay: yesterday in the format's zone for daily totals, the last rain day whose
+ * end has passed for sub-daily readings). Its length is at most STATION_MAX_REQUESTS requests of
+ * maxDaysPerRequest days (stationWindowDays). The first fetch starts on the startDate, or STATION_FIRST_DAYS back;
+ * later ones as DWS's do: a window that can't reach the end starts the day after the newest day (or the last
+ * day read, `readThrough`, so a backfill through days with no readings moves on a whole window each fetch
+ * instead of asking for the same empty one forever), and the one that reaches the end re-reads up to
+ * revisionDays before the newest day, as much as still fits. A startDate is a floor; one after the end (a
+ * station not reporting yet) asks for that one day, which can't have ended, so nothing is written and the feed
+ * counts as caught up.
+ */
+function stationWindow(config: StationApiConfig, lastDataDate: string | null, today: string, readThrough: string | null, nowMs: number): FetchWindow {
+	const end = stationLastDay(config.format, nowMs, today);
+	const maxDays = stationWindowDays(config);
+	const revision = config.revisionDays ?? STATION_DEFAULT_REVISION_DAYS;
+	const after = (mark: string) => {
+		const reach = addDays(end, 1 - maxDays);
+		const resume = addDays(mark, 1) < reach ? addDays(mark, 1) : reach;
+		const reread = addDays(mark, -revision);
+		return reread > resume ? reread : resume;
+	};
+	let start = lastDataDate ? after(lastDataDate) : (config.startDate ?? stationFirstDay(end));
+	if (readThrough && readThrough < end && addDays(start, maxDays - 1) <= readThrough) start = after(readThrough);
+	if (start > end) start = end;
+	if (config.startDate && start < config.startDate) start = config.startDate;
+	if (start > end) return { start, end: start };
+	const limit = addDays(start, maxDays - 1);
+	return { start, end: limit < end ? limit : end };
 }
 
 /** Text Postgres will store: it refuses U+0000 in text and in jsonb. */
@@ -422,7 +467,15 @@ export type FetchAnswer = FetchResult | CellsResult;
  * DWS_WINDOW_DAYS (up to 20 years) is refused here: the feed records the
  * failure and its retry asks for the shorter window.
  */
-const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: DWS_WINDOW_DAYS, ecmwf_ens: 15, agera5_et0: ET0_MAX_DAYS };
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = {
+	chirps: CHIRPS_MAX_DAYS,
+	chirps_gefs: 16,
+	dws: DWS_WINDOW_DAYS,
+	ecmwf_ens: 15,
+	agera5_et0: ET0_MAX_DAYS,
+	// The most a config allows (366 days a request); the transform holds each request to its own config's (stationWindowDays).
+	station_api: STATION_MAX_REQUESTS * 366
+};
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -433,6 +486,13 @@ export const FetchRequestSchema = z
 		end: SeriesStartDate,
 		today: SeriesStartDate,
 		heldThrough: SeriesStartDate.optional(),
+		feedId: z.string().uuid().optional(),
+		credential: z
+			.string()
+			.max(SEALED_MAX)
+			.regex(/^[A-Za-z0-9+/]+={0,2}$/, 'base64')
+			.nullable()
+			.optional(),
 		cells: z
 			.object({
 				cells: z
@@ -470,8 +530,13 @@ export const FetchRequestSchema = z
 		// No more days than fetchWindow ever asks for: the fetcher is the
 		// door to the internet, and a request is a message off a queue.
 		const days = toEpochDay(v.end) - toEpochDay(v.start) + 1;
-		if (days > MAX_WINDOW_DAYS[v.source]) {
+		if (days > MAX_WINDOW_DAYS[v.source] || (v.source === 'station_api' && days > stationWindowDays(config.data as StationApiConfig))) {
 			ctx.addIssue({ code: 'custom', path: ['end'], message: 'the window is longer than one fetch reads' });
+			return z.NEVER;
+		}
+		// A station feed names itself (its key is bound to its id); no other source carries a feed id or a key.
+		if (v.source === 'station_api' ? v.feedId === undefined : v.feedId !== undefined || v.credential !== undefined) {
+			ctx.addIssue({ code: 'custom', path: ['feedId'], message: 'a feed id and key go with a station API request only' });
 			return z.NEVER;
 		}
 		// Only as the feed_fetch job gives it: a CHIRPS sat day inside the window (rnl has no preliminary days).
@@ -522,7 +587,7 @@ export function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCel
  * whose claims come due again. A forecast is used whole or not at all, and
  * DWS is one request, so neither cuts.
  */
-export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchBudget = {}): Promise<FetchAnswer> {
+export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchBudget = {}, clients: { station?: StationClient } = {}): Promise<FetchAnswer> {
 	try {
 		switch (req.source) {
 			case 'chirps': {
@@ -567,6 +632,21 @@ export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchB
 			case 'agera5_et0':
 				// The same for reference ET (fromMirrorEt0.ts): no request ever goes to the CDS or NASA POWER from a feed.
 				throw new FeedFormatError('reference evapotranspiration is read only from our data copy, never by the fetcher');
+			case 'station_api': {
+				// The key is opened here, in the process that asks the station's API, and nowhere else (feeds/credential.ts).
+				let credential = null;
+				if (req.credential) {
+					try {
+						credential = openFeedCredential(req.credential, req.feedId ?? '');
+					} catch (err) {
+						if (err instanceof FeedCredentialError) throw new FeedKeyError(STATION_KEY_PROBLEMS.unopened[0]);
+						throw err;
+					}
+				}
+				const client = clients.station ?? (await stationClient(feedSourceMode()));
+				const r = await fetchStation(req.config as StationApiConfig, req, credential, client, (budget.now ?? Date.now)());
+				return { ok: true, startDate: r.startDate, values: r.values, meta: r.meta };
+			}
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError(DWS_FORMAT_FAILURES.notFound[0]);
@@ -590,7 +670,9 @@ export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchB
  * fail the same checks (feeds/ingest.ts, cellCache.ts seriesFromCache).
  */
 export function fetchFailure(err: unknown, config: FeedConfig): Extract<FetchResult, { ok: false }> {
-	if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) console.error('feed fetch failed:', err);
+	// Never the error itself: a URL error (ERR_INVALID_URL) carries the whole URL, a station feed's key with it, and
+	// a stray error's message can quote anything. Its name, code and where it was thrown say enough.
+	if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) logEvent('error', { event: 'feed_fetch_internal', ...safeError(err), frames: stackFrames(err) });
 	// A box skips a sea cell only when asked to (skipNoData): otherwise it would quietly shrink the area the mean is over.
 	if (err instanceof FeedNoDataError && 'bbox' in config && config.bbox && !config.skipNoData) {
 		return { ok: false, error: feedErrorMessage(new FeedFormatError(`${err.message}, inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)`)) };

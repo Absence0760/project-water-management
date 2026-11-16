@@ -60,21 +60,34 @@
 // takeHostSlotWaiting, HOST_SLOT_PASS_WORK_MS), and only if it is still held
 // then skips that run (`stopped: "host_busy"`), its next run catching up.
 //
+// A station API feed's request (issue #784) carries its key sealed
+// (feeds/credential.ts); runFetch opens it here with the runtime secret
+// FEED_CREDENTIAL_PRIVATE_KEY, loaded at cold start, and asks the station's
+// API through the guarded client (feeds/stationHttp.ts). It takes no CHC
+// slot. Its failures log fixed reasons (`key_refused`, `credential`) and
+// labels, never the URL or the key.
+//
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
-import { FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
+import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
+import { FEED_KEY_PREFIX, FEED_SERVER_ERROR_PREFIX, FeedFormatError, FeedKeyError, FeedKeyRefusedError, FeedRefusedError, FeedServerError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchAnswer, type FetchRequest, runFetch, utcToday } from './feeds/fetch.js';
 import { HOST_BUSY_ANSWER, type HostBusyAnswer, type HostSlots, hostSlots, type SlotTake, slotHostFor, takeHostSlotWaiting } from './feeds/hostSlot.js';
 import { allowLiveFeedRequests, type FeedHttp, feedHttp, feedSourceMode } from './feeds/http.js';
 import { DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL, dwsFailureLabel } from './feeds/sources/dws.js';
+import { type StationClient, stationClient, STATION_KEY_PROBLEMS } from './feeds/sources/station.js';
+import { STATION_FAILURES } from './feeds/stationHttp.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
 import { emitMetricLine, logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
 
-// Refuse to start with a local default, FEED_SOURCE=fixtures above all (config/production.ts).
+// The runtime secret first, once per cold start (config/runtimeSecrets.ts): the private key that opens station API
+// feeds' sealed keys (feeds/credential.ts, issue #784), when the deployment has any. Then refuse to start with a
+// local default, FEED_SOURCE=fixtures above all (config/production.ts).
+await loadRuntimeSecrets('fetcher');
 assertLambdaEnv('fetcher');
 // The one Lambda that asks CHC and DWS: every other process refuses a live request on Lambda (feeds/http.ts).
 allowLiveFeedRequests();
@@ -92,6 +105,15 @@ const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched
 const UNAVAILABLE = feedErrorMessage(new FeedUnavailableError(''));
 const REFUSED = feedErrorMessage(new FeedRefusedError());
 const FORMAT = feedErrorMessage(new FeedFormatError(''));
+/** A station's API refused the saved key (feeds/errors.ts FeedKeyRefusedError), as stored, with its detail. */
+const KEY_REFUSED: ReadonlyMap<string, string> = new Map([
+	[feedErrorMessage(new FeedKeyRefusedError(401)), 'HTTP 401'],
+	[feedErrorMessage(new FeedKeyRefusedError(403)), 'HTTP 403']
+]);
+/** A station feed's key couldn't be used (FeedKeyError), as stored, with the fixed label each logs. */
+const KEY_PROBLEMS: ReadonlyMap<string, string> = new Map(Object.values(STATION_KEY_PROBLEMS).map(([text, label]) => [feedErrorMessage(new FeedKeyError(text)), label]));
+/** The guarded station client's own unavailable texts (feeds/stationHttp.ts STATION_FAILURES), with their labels. */
+const STATION_DETAILS: ReadonlyMap<string, string> = new Map(Object.values(STATION_FAILURES).map(([text, label]) => [text, label]));
 
 /** The source's own server error pages, as stored, with the fixed label each logs as its detail (feeds/errors.ts FeedServerError). */
 const SERVER_ERRORS: ReadonlyMap<string, string> = new Map([[feedErrorMessage(new FeedServerError(DWS_SERVER_ERROR, DWS_SERVER_ERROR_LABEL)), DWS_SERVER_ERROR_LABEL]]);
@@ -103,12 +125,19 @@ const SERVER_ERRORS: ReadonlyMap<string, string> = new Map([[feedErrorMessage(ne
  * answered HTTP 429 or 503 (feeds/errors.ts FeedThrottledError). `refused`:
  * it answered HTTP 403, refusing this server's address (FeedRefusedError).
  * A server error page (FeedServerError: DWS's ScriptServer page) is
- * `unavailable`, its detail saying which page.
+ * `unavailable`, its detail saying which page. A station API feed (issue
+ * #784): `key_refused` when its API answered HTTP 401 or 403 to the saved key
+ * (FeedKeyRefusedError, which backs off like `refused`), `credential` when the
+ * key couldn't be used at all (FeedKeyError: none saved, or it won't open).
  */
-export function fetchFailureReason(error: string): 'timeout' | 'throttled' | 'refused' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
+export function fetchFailureReason(
+	error: string
+): 'timeout' | 'throttled' | 'refused' | 'key_refused' | 'credential' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
 	if (error === TOO_SLOW) return 'timeout';
 	if (error === INVALID_REQUEST) return 'invalid_request';
 	if (error === REFUSED) return 'refused';
+	if (KEY_REFUSED.has(error)) return 'key_refused';
+	if (error.startsWith(`${FEED_KEY_PREFIX}: `)) return 'credential';
 	if (error.startsWith(FEED_SERVER_ERROR_PREFIX)) return 'unavailable';
 	if (error.startsWith(UNAVAILABLE)) return /^HTTP (429|503)\b/.test(error.slice(UNAVAILABLE.length)) ? 'throttled' : 'unavailable';
 	if (error.startsWith(FORMAT)) return 'format';
@@ -146,13 +175,17 @@ export const FAILURE_DETAIL_MAX = 80;
  */
 export function failureDetail(error: string): string | null {
 	if (error === REFUSED) return 'HTTP 403';
+	const key = KEY_REFUSED.get(error) ?? KEY_PROBLEMS.get(error);
+	if (key) return key;
 	const server = SERVER_ERRORS.get(error);
 	if (server) return server;
 	if (error.startsWith(FORMAT)) return dwsFailureLabel(error.slice(FORMAT.length));
 	if (!error.startsWith(UNAVAILABLE)) return null;
 	const rest = error.slice(UNAVAILABLE.length);
-	const status = /^HTTP [1-5]\d\d\b/.exec(rest);
-	if (status) return status[0];
+	const status = /^HTTP [1-5]\d\d\b/.exec(rest) ?? /^the station API answered (HTTP [1-5]\d\d)$/.exec(rest)?.slice(1);
+	if (status) return status[0]!;
+	const station = STATION_DETAILS.get(rest);
+	if (station) return station;
 	return SAFE_DETAILS.includes(rest) && rest.length <= FAILURE_DETAIL_MAX ? rest : null;
 }
 
@@ -182,6 +215,19 @@ export function withDeadline(http: FeedHttp, deadline: number): FeedHttp {
 	};
 }
 
+/** A station client that refuses new requests once `deadline` has passed, like withDeadline (a station fetch is up to STATION_MAX_REQUESTS of them). */
+export function stationWithDeadline(client: StationClient, deadline: number): StationClient {
+	return {
+		pacer: client.pacer,
+		http: {
+			get: async (req) => {
+				if (Date.now() >= deadline) throw new FeedUnavailableError('it did not answer in time');
+				return client.http.get(req);
+			}
+		}
+	};
+}
+
 /**
  * runFetch within `ms`. The fetch is told the deadline (its budget): a CHIRPS
  * cell-cache fetch stops starting days short of it and answers with the days
@@ -190,14 +236,14 @@ export function withDeadline(http: FeedHttp, deadline: number): FeedHttp {
  * deadline itself no new request starts (withDeadline), and a fetch still
  * running is answered as a failure.
  */
-async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promise<FetchAnswer> {
+async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number, station?: StationClient): Promise<FetchAnswer> {
 	let timer: NodeJS.Timeout | undefined;
 	const late = new Promise<FetchAnswer>((resolve) => {
 		timer = setTimeout(() => resolve({ ok: false, error: TOO_SLOW }), Math.max(0, ms));
 	});
 	const deadline = Date.now() + ms;
 	try {
-		return await Promise.race([runFetch(req, withDeadline(http, deadline), { stopAt: deadline }), late]);
+		return await Promise.race([runFetch(req, withDeadline(http, deadline), { stopAt: deadline }, station ? { station: stationWithDeadline(station, deadline) } : {}), late]);
 	} finally {
 		clearTimeout(timer);
 	}
@@ -215,12 +261,14 @@ async function fetchHoldingSlot(
 	http: FeedHttp,
 	slots: HostSlots | null,
 	context: Pick<Context, 'getRemainingTimeInMillis'> | undefined,
-	ids: { feedId: string; fetchJobId: string }
+	ids: { feedId: string; fetchJobId: string },
+	station?: StationClient
 ): Promise<FetchAnswer | HostBusyAnswer> {
 	// Measured when the fetch starts, so the slot's S3 round trips come out of it.
 	const budget = () => (context ? context.getRemainingTimeInMillis() - FETCH_SEND_MARGIN_MS : DEFAULT_BUDGET_MS);
 	const host = slotHostFor(req.source);
-	if (!host || !slots) return fetchWithin(req, http, budget());
+	// A station API feed takes no slot: its host is the station provider's, never CHC (feeds/hostSlot.ts slotHostFor).
+	if (!host || !slots) return fetchWithin(req, http, budget(), station);
 	let take: SlotTake;
 	try {
 		take = await slots.take(host, { holder: `fetcher:${req.source}`, remainingMs: context ? context.getRemainingTimeInMillis() : null });
@@ -822,6 +870,7 @@ async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemaining
 	const http = await feedHttp();
 	// CHC's shared request slot (feeds/hostSlot.ts), in the copy MIRROR_URL names; none without one (a local run).
 	const slots = hostSlots(process.env.MIRROR_URL);
+	let station: StationClient | undefined;
 	for (const record of event.Records) {
 		const req = parseFetchRequest(record.body);
 		let ids: z.output<typeof FetchEnvelope>;
@@ -829,7 +878,9 @@ async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemaining
 		const started = Date.now();
 		if (req) {
 			ids = req;
-			result = await fetchHoldingSlot(req.request, http, slots, context, ids);
+			// The station client is made once a batch, and only for a station request (issue #784).
+			if (req.request.source === 'station_api') station ??= await stationClient(feedSourceMode());
+			result = await fetchHoldingSlot(req.request, http, slots, context, ids, station);
 		} else {
 			const env = envelope(record.body);
 			if (!env) {
