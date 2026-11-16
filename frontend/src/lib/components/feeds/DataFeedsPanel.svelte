@@ -94,7 +94,10 @@
 	/** The field formError is about (a client-side check), for aria-invalid and focus. */
 	let formField = $state<'cells' | 'bbox' | 'station' | 'start' | StationField | null>(null);
 	/** The station API form, once its chunk is in: build() gives the body or the first problem. */
-	let stationForm = $state<{ build: () => { body: StationBody } | { error: string; field: StationField } }>();
+	let stationForm = $state<{
+		build: () => { body: StationBody } | { error: string; field: StationField };
+		serverProblem: (e: unknown) => { error: string; field: StationField } | null;
+	}>();
 	/** The card whose key is being replaced (owners only), and the write-only fields of its small form. */
 	let keyFor = $state<string | null>(null);
 	let keySecret = $state('');
@@ -322,22 +325,20 @@
 		e?.preventDefault();
 		// A map proposal has its own Apply (Enter in its start date lands here).
 		if (busy || mapArea) return;
-		// Text the start date field can't read as a day: it says so under itself (DayInput); go there.
-		const box = document.getElementById(`${uid}-start`) as HTMLInputElement | null;
-		if (box?.validity.customError) {
-			box.focus();
-			return;
+		// Text a start date field can't read as a day: it says so under itself (DayInput); go there (the station form's
+		// is inside its Requests fold, which opens).
+		for (const id of [`${uid}-start`, `${uid}-st-start`]) {
+			const box = document.getElementById(id) as HTMLInputElement | null;
+			if (box?.validity.customError) {
+				await focusField(id);
+				return;
+			}
 		}
 		const parsed = draft.source === 'station_api' ? stationBody() : draftToBody(draft);
 		if ('error' in parsed) {
 			formError = parsed.error;
 			formField = parsed.field;
-			await tick();
-			const el = document.getElementById(`${uid}-${parsed.field}`);
-			// A field inside a closed fold (the station form's Requests and Values) opens it first.
-			const fold = el?.closest('details');
-			if (fold && !fold.open) fold.open = true;
-			el?.focus();
+			await focusField(`${uid}-${parsed.field}`);
 			return;
 		}
 		busy = 'add';
@@ -379,12 +380,25 @@
 					? `Feed attached: its first fetch replaces ${describeTarget(feed)} with ${describeWrites(feed).slice(3)}. The old values stay in the History tab. Refit afterwards.`
 					: `Feed attached: ${describeTarget(feed)} from ${describePlace(feed)}. It runs on the next schedule, or now with “Run now”.`) + warningText(warning);
 		} catch (err) {
-			formError = errorText(err);
+			// A station feed's refusal names its field (the server's 400 details): show it there, as the form's own checks do.
+			const p = draft.source === 'station_api' ? (stationForm?.serverProblem(err) ?? null) : null;
+			formError = p?.error ?? errorText(err);
+			formField = p?.field ?? null;
 		}
 		// Either way the list may have moved (another owner's feed for the same series is the usual 409).
 		await reload();
 		busy = null;
 		if (attached) await closeForm();
+		else if (formField) await focusField(`${uid}-${formField}`);
+	}
+
+	/** Focus a field of the form, opening the fold it sits in (the station form's Requests and Values) first. */
+	async function focusField(id: string) {
+		await tick();
+		const el = document.getElementById(id);
+		const fold = el?.closest('details');
+		if (fold && !fold.open) fold.open = true;
+		el?.focus();
 	}
 
 	/** A station API feed's body from its form (issue #784): it writes a rainfall station series named after the station. */
@@ -580,12 +594,12 @@
 					{#if !mapOnly}
 						<div class="field">
 							<label for="{uid}-src">Source</label>
-							<select id="{uid}-src" value={draft.source} onchange={(e) => pickSource(e.currentTarget.value as FeedDraft['source'])}>
+							<select id="{uid}-src" value={draft.source} aria-describedby={stationOff ? `${uid}-src-off` : undefined} onchange={(e) => pickSource(e.currentTarget.value as FeedDraft['source'])}>
 								{#each data.sources as s (s.source)}
 									<option value={s.source} disabled={s.source === 'station_api' && stationOff}>{s.label}{s.source === 'station_api' && stationOff ? ' (off on this server)' : ''}</option>
 								{/each}
 							</select>
-							{#if stationOff}<p class="hint" data-testid="station-api-off">Weather station API feeds are off on this server: the operator switches them on.</p>{/if}
+							{#if stationOff}<p class="hint" id="{uid}-src-off" data-testid="station-api-off">Weather station API feeds are off on this server: the operator switches them on.</p>{/if}
 						</div>
 					{/if}
 					{#if draft.source !== 'dws' && draft.source !== 'station_api'}
@@ -658,7 +672,7 @@
 						<p class="hint">Writes a rainfall station’s daily rain ({kindLabel('rain_catchment_mm')}), fetched from its provider’s web API every day.</p>
 						<Lazy load={loadStationForm}>
 							{#snippet children(StationForm)}
-								<StationForm bind:this={stationForm} {uid} bind:name={draft.targetName} errorField={formField} errorId="{uid}-err" />
+								<StationForm bind:this={stationForm} {uid} bind:name={draft.targetName} errorField={formField} error={formError} errorId="{uid}-err" />
 							{/snippet}
 						</Lazy>
 					{:else}
@@ -736,7 +750,8 @@
 							</div>
 						{/if}
 					{/if}
-					{#if formError}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
+					<!-- The station form shows a problem with one of its fields under that field. -->
+					{#if formError && !(draft.source === 'station_api' && formField)}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
 					{#if asking}
 						{@const q = asking}
 						<!-- An inline, non-modal question (issue #30): focus lands on the safe choice; Escape goes back to the name field. -->
@@ -856,7 +871,8 @@
 						{/if}
 						{#if keyFor === f.id && data.canEdit}
 							{@const basic = f.config.auth?.kind === 'basic'}
-							<form class="key-form" id="{uid}-keyform-{f.id}" onsubmit={(e) => saveKey(e, f)} novalidate aria-label="Replace the key: {describeTarget(f)}">
+							{@const replacing = !!f.credential?.saved}
+							<form class="key-form" id="{uid}-keyform-{f.id}" onsubmit={(e) => saveKey(e, f)} novalidate aria-label="{replacing ? 'Replace the key' : 'Add a key'}: {describeTarget(f)}">
 								{#if basic}
 									<div class="field">
 										<label for="{uid}-key-user-{f.id}">User name</label>
@@ -874,7 +890,9 @@
 										aria-invalid={keyError ? true : undefined}
 										aria-describedby="{uid}-key-h-{f.id}{keyError ? ` ${uid}-key-err-${f.id}` : ''}"
 									/>
-									<span class="hint" id="{uid}-key-h-{f.id}">It replaces the saved one, sealed so only the server’s fetcher can read it; it is never shown again.</span>
+									<span class="hint" id="{uid}-key-h-{f.id}"
+										>{replacing ? 'It replaces the saved one, sealed' : 'At least 8 characters. Kept sealed'} so only the server’s fetcher can read it; it is never shown again.</span
+									>
 								</div>
 								{#if keyError}<p class="err" id="{uid}-key-err-{f.id}" role="alert">{keyError}</p>{/if}
 								<div class="act">

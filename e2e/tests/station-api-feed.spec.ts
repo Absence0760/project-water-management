@@ -69,7 +69,35 @@ test('an owner attaches a station API feed with a key, tries a sample, runs it, 
 	await expect(panel.getByRole('alert')).toHaveText(/^The URL carries a key \(api_key=…\)/);
 	await expect(form.getByLabel('The API’s URL')).toBeFocused();
 	await expect(form.getByLabel('The API’s URL')).toHaveAttribute('aria-invalid', 'true');
+	// The problem shows under its own field (not at the foot of the long form), as that field's description.
+	const urlField = form.locator('.field').filter({ has: page.getByLabel('The API’s URL') });
+	await expect(urlField.getByRole('alert')).toBeVisible();
+	await expect(form.getByLabel('The API’s URL')).toHaveAccessibleDescription(/The URL carries a key \(api_key=…\)/);
+	// A long URL wraps in its box, so it can be read whole.
+	const urlBox = await form.getByLabel('The API’s URL').evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+	expect(urlBox.scroll).toBeLessThanOrEqual(urlBox.client);
+
+	// A refusal only the server can make (a private address) lands on its field too, in the server's own words.
+	await form.getByLabel('The API’s URL').fill('https://10.1.2.3/v1/daily.json?station={station}&start={start}&end={end}');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	await expect(urlField.getByRole('alert')).toHaveText('The URL points at a private or reserved address.');
+	await expect(form.getByLabel('The API’s URL')).toBeFocused();
+	await expect(form.getByLabel('The API’s URL')).toHaveAttribute('aria-invalid', 'true');
 	await form.getByLabel('The API’s URL').fill(URL_TEMPLATE);
+
+	// A problem inside a closed fold opens it and focuses the field.
+	const requests = form.getByTestId('station-requests');
+	await expect(requests).not.toHaveAttribute('open');
+	await requests.locator('summary').click();
+	await form.getByLabel('Days per request').fill('400');
+	await requests.locator('summary').click();
+	await expect(requests).not.toHaveAttribute('open');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	await expect(requests).toHaveAttribute('open');
+	await expect(form.getByLabel('Days per request')).toBeFocused();
+	await expect(requests.getByRole('alert')).toHaveText('Days per request is a whole number from 1 to 366.');
+	await form.getByLabel('Days per request').fill('');
+	await requests.locator('summary').click();
 
 	// A key method with no key is refused too.
 	await form.getByLabel('How the key is sent').selectOption({ label: 'Bearer token (Authorization: Bearer …)' });
@@ -159,4 +187,48 @@ test('an owner attaches a station API feed with a key, tries a sample, runs it, 
 	await expect(feed.getByTestId('feed-key')).toHaveText('No key saved: the feed can’t sign in to its API until an owner adds one.');
 	await expect(feed.getByRole('button', { name: `Add a key: ${TARGET}` })).toBeVisible();
 	await expect(feed.getByRole('button', { name: `Remove key: ${TARGET}` })).toHaveCount(0);
+	// Adding one opens a form named for adding, not replacing.
+	await feed.getByRole('button', { name: `Add a key: ${TARGET}` }).click();
+	await expect(feed.getByRole('form', { name: `Add a key: ${TARGET}` })).toBeVisible();
+	await expect(feed.getByLabel('New key', { exact: true })).toBeFocused();
+});
+
+test.describe('on a phone', () => {
+	test.use({ viewport: { width: 390, height: 844 } });
+
+	test('the station form fits a phone with no sideways scroll, passes axe, and says when the server has the source off', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Station phone');
+		await page.goto(`/projects/${project.id}?tab=series`);
+		const panel = page.getByRole('region', { name: 'Data feeds' });
+		await expect(panel.getByText('No feeds yet.')).toBeVisible();
+		await panel.getByRole('button', { name: 'Attach a feed' }).click();
+		await panel.getByLabel('Source').selectOption({ label: 'Weather station API' });
+		const form = panel.getByTestId('station-api-form');
+		// The longest choices: a preset with a long URL, the ISO time format, a key in a header.
+		await form.getByLabel('Start from a known API').selectOption({ label: 'Weather Underground PWS (daily)' });
+		await form.getByLabel('Time format').selectOption({ label: 'ISO date and time (2026-11-15T08:05:00, with or without a zone)' });
+		await form.getByLabel('How the key is sent').selectOption({ label: 'In a header' });
+		await form.getByTestId('station-requests').locator('summary').click();
+		await form.getByTestId('station-values').locator('summary').click();
+		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+		expect(overflow).toBeLessThanOrEqual(0);
+		// Every field stays inside the card.
+		const card = await panel.locator('form.add').boundingBox();
+		for (const box of await form.locator('input, select, textarea').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right))) {
+			expect(box).toBeLessThanOrEqual(card!.x + card!.width + 0.5);
+		}
+		await expectNoViolations(page, { include: '#data-feeds' });
+
+		// A server with station API feeds off (STATION_API_FEEDS): the source is offered disabled, its note the select's description.
+		await page.route(`**/projects/${project.id}/feeds`, async (route) => {
+			if (route.request().method() !== 'GET') return route.continue();
+			const r = await route.fetch();
+			await route.fulfill({ response: r, json: { ...(await r.json()), stationApiFeeds: false } });
+		});
+		await page.reload();
+		await panel.getByRole('button', { name: 'Attach a feed' }).click();
+		await expect(panel.getByRole('option', { name: 'Weather station API (off on this server)' })).toBeDisabled();
+		await expect(panel.getByLabel('Source')).toHaveAccessibleDescription('Weather station API feeds are off on this server: the operator switches them on.');
+	});
 });

@@ -8,7 +8,9 @@ import {
 	requestLine,
 	STATION_PRESETS,
 	stationDraftToBody,
+	stationFieldOfPath,
 	stationFormatOf,
+	stationServerProblem,
 	stationUrlProblem,
 	urlPlaceholderNote,
 	type StationDraft
@@ -41,6 +43,23 @@ describe('stationDraftToBody', () => {
 
 	it('names the station first: the series is called that', () => {
 		expect(stationDraftToBody(ready(), '  ')).toEqual({ error: 'Name the station: its rainfall series is called that.', field: 'name' });
+	});
+
+	it('says the first problem in the form’s order: the URL, the station ID, then the name', () => {
+		expect(stationDraftToBody(ready({ url: '' }), '')).toMatchObject({ field: 'st-url' });
+		expect(stationDraftToBody(ready({ station: '' }), '')).toMatchObject({ field: 'st-station' });
+	});
+
+	it('starts no earlier than 2000, in the server’s words', () => {
+		expect(stationDraftToBody(ready({ startDate: '1999-12-31' }), 'G')).toEqual({
+			error: 'A station feed starts on 1 Jan 2000 at the earliest: upload an older record instead.',
+			field: 'st-start'
+		});
+		expect('body' in stationDraftToBody(ready({ startDate: '2000-01-01' }), 'G')).toBe(true);
+	});
+
+	it('puts a too-long user name on the user name field', () => {
+		expect(stationDraftToBody(ready({ authKind: 'basic', secret: 'password1', user: 'u'.repeat(257) }), 'G')).toMatchObject({ field: 'st-user' });
 	});
 
 	it('sends the key once, trimmed, and a user name only for basic', () => {
@@ -109,6 +128,18 @@ describe('stationUrlProblem and urlPlaceholderNote', () => {
 		expect(stationUrlProblem('https://station.example/?token=abc')).toMatch(/carries a key \(token=…\)/);
 		expect(stationUrlProblem('https://station.example/#x')).toMatch(/#fragment/);
 		expect(stationUrlProblem(URL)).toBeNull();
+	});
+
+	it('refuses what the server refuses: a placeholder in the host, another port, a name only the local network knows', () => {
+		// The server's words (backend config.ts stationUrlProblem, stationUrl.ts urlProblem), as sentences.
+		expect(stationUrlProblem('https://{station}.example.com/daily?from={start}')).toBe(
+			'The URL’s site (its host) must be written out: put {station}, {start} and {end} in its path or query.'
+		);
+		expect(stationUrlProblem('https://api.example.com:8443/rain')).toBe('The URL must use the standard HTTPS port: take out the :port.');
+		expect(stationUrlProblem('https://api.example.com:443/rain')).toBeNull();
+		for (const host of ['localhost', 'logger', 'logger.local', 'station.internal', 'a.localhost']) {
+			expect(stationUrlProblem(`https://${host}/rain`), host).toBe('The URL’s host must be a public internet name.');
+		}
 	});
 
 	it('says when the URL names no days', () => {
@@ -214,5 +245,47 @@ describe('the folds’ lines', () => {
 		);
 		expect(moreLine(emptyStationDraft())).toBe('values as written, the usual missing markers, a day with no readings is a gap');
 		expect(moreLine({ ...emptyStationDraft(), scale: '25.4', missing: 'x', noReadingsMeans: 'zero' })).toBe('values × 25.4, your own missing markers, a day with no readings is 0 mm');
+	});
+});
+
+describe('the server’s refusal, on its field', () => {
+	const bad = (path: (string | number)[], message: string) => ({ status: 400, message: 'invalid request (…)', details: [{ path, message }] });
+
+	it('maps each place in the body to the form’s field', () => {
+		expect(stationFieldOfPath(['config', 'url'], 'none')).toBe('st-url');
+		expect(stationFieldOfPath(['config', 'station'], 'none')).toBe('st-station');
+		expect(stationFieldOfPath(['config', 'auth', 'name'], 'header')).toBe('st-header-name');
+		expect(stationFieldOfPath(['config', 'auth', 'name'], 'query')).toBe('st-query-name');
+		expect(stationFieldOfPath(['config', 'headers', 'X-Thing'], 'none')).toBe('st-headers');
+		expect(stationFieldOfPath(['config', 'urlTimeFormat'], 'none')).toBe('st-url-time');
+		expect(stationFieldOfPath(['config', 'maxDaysPerRequest'], 'none')).toBe('st-max-days');
+		expect(stationFieldOfPath(['config', 'revisionDays'], 'none')).toBe('st-revision');
+		expect(stationFieldOfPath(['config', 'startDate'], 'none')).toBe('st-start');
+		expect(stationFieldOfPath(['config', 'format', 'value'], 'none')).toBe('st-value');
+		expect(stationFieldOfPath(['config', 'format', 'timeZone'], 'none')).toBe('st-zone');
+		expect(stationFieldOfPath(['credential', 'secret'], 'bearer')).toBe('st-secret');
+		expect(stationFieldOfPath(['credential', 'user'], 'basic')).toBe('st-user');
+		expect(stationFieldOfPath(['targetName'], 'none')).toBe('name');
+		expect(stationFieldOfPath(['schedule'], 'none')).toBeNull();
+	});
+
+	it('says the server’s words as a sentence on that field', () => {
+		expect(stationServerProblem(bad(['config', 'url'], 'the URL points at a private or reserved address'), 'none')).toEqual({
+			error: 'The URL points at a private or reserved address.',
+			field: 'st-url'
+		});
+		// A problem with the whole format is about how its times are read, or its zone or scale when it names them.
+		expect(stationServerProblem(bad(['config', 'format'], 'an unknown time zone'), 'none')).toMatchObject({ field: 'st-zone' });
+		expect(stationServerProblem(bad(['config', 'format'], 'a pattern needs YYYY'), 'none')).toMatchObject({ field: 'st-time-format' });
+	});
+
+	it('puts a series another feed writes on the station name, and leaves the rest to the panel’s line', () => {
+		expect(stationServerProblem({ status: 409, message: 'another feed already writes that series' }, 'none')).toEqual({
+			error: 'Another feed already writes that series: give the station another name.',
+			field: 'name'
+		});
+		expect(stationServerProblem({ status: 409, message: 'a project can have at most 10 weather station API feeds' }, 'none')).toBeNull();
+		expect(stationServerProblem({ status: 400, message: 'station API feeds are off on this server' }, 'none')).toBeNull();
+		expect(stationServerProblem(bad(['schedule'], 'bad'), 'none')).toBeNull();
 	});
 });

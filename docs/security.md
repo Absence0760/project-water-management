@@ -3275,7 +3275,7 @@ the key another way.
 - **Never in the URL.** A URL template whose query carries a key-like
   parameter (`api_key`, `key`, `token`, `access_token`, `signature`, …,
   `STATION_KEY_PARAMS`) is refused at save, since every viewer reads the
-  config: the key goes in the key field with "Query parameter" as the
+  config: the key goes in the key field with "As a parameter in the URL" as the
   method, and is added only when the request is made.
 - **Rotation** of the fetcher's key voids every saved station key: each feed
   then says its key can't be opened, and its owner enters it again.

@@ -10,6 +10,7 @@ import {
 	timeFormatProblem,
 	type StationFormat
 } from '@water-management/engine/station-format';
+import { dayText } from '@water-management/engine/calendar';
 import type { StationApiConfigBody, StationAuthBody, StationCredentialBody } from './feeds';
 
 export type StationAuthKind = StationAuthBody['kind'];
@@ -157,6 +158,7 @@ export type StationField =
 	| 'st-header-name'
 	| 'st-query-name'
 	| 'st-secret'
+	| 'st-user'
 	| 'st-headers'
 	| 'st-url-time'
 	| 'st-max-days'
@@ -184,6 +186,8 @@ const PARAM_NAME = /^[A-Za-z0-9_.-]+$/;
 const STATION_ID = /^[A-Za-z0-9 _.:@-]+$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const PLACEHOLDER = /\{(station|start|end)\}/g;
+/** The first day a station feed may start on (backend config.ts STATION_FIRST_DAY). */
+export const STATION_FIRST_DAY = '2000-01-01';
 
 /** The URL with its placeholders filled by a stand-in, parsed; null when it isn't a URL. */
 const parsedUrl = (raw: string) => URL.parse(raw.trim().replace(PLACEHOLDER, 'x'));
@@ -194,12 +198,21 @@ export function stationUrlProblem(raw: string): string | null {
 	if (!url) return 'Enter the API’s URL, starting https://.';
 	const unknown = url.match(/\{[^}]*\}/g)?.find((p) => !['{station}', '{start}', '{end}'].includes(p));
 	if (unknown) return `${unknown} is not a placeholder: use {station}, {start} and {end}.`;
+	// The site is fixed (backend config.ts stationUrlProblem): a placeholder in the host could send the key elsewhere.
+	const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(url)?.[1] ?? '';
+	if (authority.includes('{')) return 'The URL’s site (its host) must be written out: put {station}, {start} and {end} in its path or query.';
 	const u = parsedUrl(url);
 	if (!u) return 'That isn’t a web address: it starts https:// and names the API’s host.';
 	if (u.protocol !== 'https:') return 'The URL must start with https:// (the key would travel unencrypted otherwise).';
+	if (u.port !== '' && u.port !== '443') return 'The URL must use the standard HTTPS port: take out the :port.';
 	if (u.username || u.password) return 'Put the user name and password in the key fields, not in the URL.';
+	// A name only the local network knows (backend stationUrl.ts urlProblem; the server also refuses private addresses).
+	const host = u.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+	if (!/^[\d.]+$/.test(host) && !host.includes(':') && (!host.includes('.') || /(^|\.)(localhost|internal|local)$/.test(host))) {
+		return 'The URL’s host must be a public internet name.';
+	}
 	for (const k of u.searchParams.keys()) {
-		if (KEY_PARAMS.test(k)) return `The URL carries a key (${k}=…): take it out, choose “As a parameter in the URL” named ${k}, and enter the key in the key field, where it is kept sealed.`;
+		if (KEY_PARAMS.test(k)) return `The URL carries a key (${k}=…): take it out, choose “As a parameter in the URL” named ${k} as how the key is sent, and enter the key in the key field, where it is kept sealed.`;
 	}
 	if (u.hash) return 'The URL has a #fragment, which is never sent: take it out.';
 	return null;
@@ -289,13 +302,14 @@ export interface StationBody {
  * carries an empty one; attaching with a key method and no key is refused here (the feed couldn't fetch).
  */
 export function stationDraftToBody(d: StationDraft, name: string): { body: StationBody } | Problem {
-	if (!name.trim()) return { error: 'Name the station: its rainfall series is called that.', field: 'name' };
+	// In the form's order (URL, station ID, station name, the key, …), so the first problem is the first field to fix.
 	const urlProblem = stationUrlProblem(d.url);
 	if (urlProblem) return { error: urlProblem, field: 'st-url' };
 	const url = d.url.trim();
 	const station = d.station.trim();
 	if (url.includes('{station}') && !station) return { error: 'The URL has {station}: enter the station’s ID.', field: 'st-station' };
 	if (station && (station.length > 100 || !STATION_ID.test(station))) return { error: 'A station ID is letters, digits, spaces and . _ : @ - (at most 100).', field: 'st-station' };
+	if (!name.trim()) return { error: 'Name the station: its rainfall series is called that.', field: 'name' };
 
 	let auth: StationAuthBody;
 	if (d.authKind === 'header') {
@@ -342,6 +356,7 @@ export function stationDraftToBody(d: StationDraft, name: string): { body: Stati
 	if (revisionDays === null) return { error: 'Days to read again is a whole number from 0 to 60.', field: 'st-revision' };
 	const start = d.startDate.trim();
 	if (start && !ISO_DAY.test(start)) return { error: 'The start date should be a day.', field: 'st-start' };
+	if (start && start < STATION_FIRST_DAY) return { error: `A station feed starts on ${dayText(STATION_FIRST_DAY)} at the earliest: upload an older record instead.`, field: 'st-start' };
 
 	const fmt = stationFormatOf(d);
 	if ('error' in fmt) return fmt;
@@ -358,7 +373,7 @@ export function stationDraftToBody(d: StationDraft, name: string): { body: Stati
 		format: fmt.format
 	};
 	const user = d.user.trim();
-	if (user.length > 256) return { error: 'The user name is at most 256 characters.', field: 'st-secret' };
+	if (user.length > 256) return { error: 'The user name is at most 256 characters.', field: 'st-user' };
 	// The user name only for Basic, and only when typed (the API takes none rather than an empty one).
 	const credential = d.authKind !== 'none' && secret ? (d.authKind === 'basic' && user ? { secret, user } : { secret }) : undefined;
 	return { body: credential ? { config, credential } : { config } };
@@ -505,4 +520,75 @@ export function moreLine(d: StationDraft): string {
 	const scale = d.scale.trim() && d.scale.trim() !== '1' ? `values × ${d.scale.trim()}` : 'values as written';
 	const missing = d.missing.trim().toLowerCase() === DEFAULT_MISSING_TEXT ? 'the usual missing markers' : 'your own missing markers';
 	return `${scale}, ${missing}, a day with no readings is ${d.noReadingsMeans === 'zero' ? '0 mm' : 'a gap'}`;
+}
+
+// --- The server's answer, on its field -------------------------------------------------------
+
+/** A sentence from a server message: a capital first and a full stop last. */
+const sentence = (m: string) => {
+	const t = m.trim();
+	return `${t.charAt(0).toUpperCase()}${t.slice(1)}${/[.!?…]$/.test(t) ? '' : '.'}`;
+};
+
+/** The field of each StationFormat property the server names (config.format.<name>). */
+const FORMAT_FIELDS: Record<string, StationField> = {
+	time: 'st-time',
+	value: 'st-value',
+	timeFormat: 'st-time-format',
+	timeZone: 'st-zone',
+	records: 'st-records',
+	skipLines: 'st-skip',
+	scale: 'st-scale',
+	missing: 'st-missing'
+};
+
+/** The form's field for a place in the request body (a zod issue's path), or null for one the form has no field for. */
+export function stationFieldOfPath(path: readonly (string | number)[], authKind: StationAuthKind): StationField | null {
+	const [top, key, sub] = path;
+	if (top === 'targetName') return 'name';
+	if (top === 'credential') return key === 'user' ? 'st-user' : 'st-secret';
+	if (top !== 'config') return null;
+	switch (key) {
+		case 'url':
+			return 'st-url';
+		case 'station':
+			return 'st-station';
+		case 'auth':
+			return authKind === 'header' ? 'st-header-name' : authKind === 'query' ? 'st-query-name' : null;
+		case 'headers':
+			return 'st-headers';
+		case 'urlTimeFormat':
+			return 'st-url-time';
+		case 'maxDaysPerRequest':
+			return 'st-max-days';
+		case 'revisionDays':
+			return 'st-revision';
+		case 'startDate':
+			return 'st-start';
+		case 'format':
+			return typeof sub === 'string' ? (FORMAT_FIELDS[sub] ?? 'st-time-format') : null;
+		default:
+			return null;
+	}
+}
+
+/**
+ * A refused attach, on the field it is about: the first of a 400's `details` (backend FeedInput's issues, each with
+ * its path in the body) in the server's own words, or a 409 for a series another feed writes, on the station name. Null
+ * when the answer names no field (the 409 cap on station feeds, the feature off): the panel's error line says it.
+ */
+export function stationServerProblem(e: { status: number; message: string; details?: unknown }, authKind: StationAuthKind): Problem | null {
+	if (e.status === 409 && /another feed already writes that series/i.test(e.message)) {
+		return { error: 'Another feed already writes that series: give the station another name.', field: 'name' };
+	}
+	if (e.status !== 400 || !Array.isArray(e.details)) return null;
+	for (const issue of e.details as { path?: unknown; message?: unknown }[]) {
+		if (!issue || typeof issue.message !== 'string' || !Array.isArray(issue.path)) continue;
+		const field = stationFieldOfPath(issue.path as (string | number)[], authKind);
+		// A whole-format problem (no property named) is about how the times are read, as stationFormatOf decides.
+		const formatWide = issue.path.length === 2 && issue.path[1] === 'format';
+		const f = field ?? (formatWide ? (/time zone/.test(issue.message) ? 'st-zone' : /scale/.test(issue.message) ? 'st-scale' : 'st-time-format') : null);
+		if (f) return { error: sentence(issue.message), field: f };
+	}
+	return null;
 }

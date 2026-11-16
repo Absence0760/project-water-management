@@ -367,7 +367,7 @@ export const STATION_URL_MAX = 2000;
 export const STATION_MAX_REQUESTS = 24;
 /** Query parameter names that carry a key: one in the typed URL is refused, so a key never sits where viewers read it. */
 export const STATION_KEY_PARAMS = /key|token|secret|pass|^pwd$|sig|auth|app_?id|credential|session|jwt|bearer|hmac|^code$|^otp$|^pin$|^hash$|^access$|licen[cs]e/i;
-/** Header names that carry a key the same way: refused as extra headers (choose “Header” as how the key is sent). */
+/** Header names that carry a key the same way: refused as extra headers (choose “In a header” as how the key is sent). */
 export const STATION_KEY_HEADERS = /key|token|secret|passw|auth|sig|credential|session|cookie/i;
 /**
  * The earliest day a station feed may start from. A backfill is walked a capped window at a time, so a far start date
@@ -470,7 +470,7 @@ export const StationApiConfig = z
 			const p = headerProblem(n, c.headers![n]!);
 			if (p) ctx.addIssue({ code: 'custom', path: ['headers', n], message: p });
 			if (STATION_KEY_HEADERS.test(n)) {
-				ctx.addIssue({ code: 'custom', path: ['headers', n], message: `the ${n} header carries a key: choose “Header” as how the key is sent, and enter the key in the key field` });
+				ctx.addIssue({ code: 'custom', path: ['headers', n], message: `the ${n} header carries a key: choose “In a header” as how the key is sent, and enter the key in the key field` });
 			}
 		}
 		if (c.auth.kind === 'header') {
@@ -503,7 +503,7 @@ export function stationUrlProblem(raw: string): string | null {
 	const problem = urlProblem(url);
 	if (problem) return problem;
 	for (const k of url.searchParams.keys()) {
-		if (STATION_KEY_PARAMS.test(k)) return `the URL carries a key (${k}=…): take it out and enter the key in the key field, where it is kept sealed; choose “Query parameter ${k}” as how it is sent`;
+		if (STATION_KEY_PARAMS.test(k)) return `the URL carries a key (${k}=…): take it out, choose “As a parameter in the URL” named ${k} as how the key is sent, and enter the key in the key field, where it is kept sealed`;
 	}
 	if (url.hash) return 'the URL has a #fragment, which is never sent: take it out';
 	return null;

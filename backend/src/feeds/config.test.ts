@@ -200,6 +200,8 @@ describe('a station API feed (issue #784)', () => {
 		for (const k of ['api_key', 'apikey', 'token', 'access_token', 'Key', 'signature']) {
 			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc&from={start}` }), k).toMatch(new RegExp(`the URL carries a key \\(${k}=…\\).*key field`));
 		}
+		// It names the choice as the form shows it (StationApiFeedForm's How the key is sent).
+		expect(issue({ ...base, url: 'https://api.example.com/rain?token=abc' })).toContain('choose “As a parameter in the URL” named token as how the key is sent');
 		expect(stationUrlProblem('https://api.example.com/rain?station_name=x')).toBeNull();
 		// Names that only contain a key word are refused too (security review): appid, x-api-key, api_token.
 		for (const k of ['appid', 'x-api-key', 'api_token', 'client_secret', 'sessionid', 'pwd']) {
@@ -251,7 +253,7 @@ describe('a station API feed (issue #784)', () => {
 	it('header rules: no key-carrying or reserved extra header, no clash with the auth header', () => {
 		expect(StationApiConfig.safeParse({ ...base, headers: { Accept: 'application/json' } }).success).toBe(true);
 		expect(issue({ ...base, headers: { Authorization: 'Bearer x' } })).toMatch(/carries a key/);
-		expect(issue({ ...base, headers: { 'X-Api-Key': 'x' } })).toMatch(/carries a key/);
+		expect(issue({ ...base, headers: { 'X-Api-Key': 'x' } })).toMatch(/carries a key: choose “In a header” as how the key is sent/);
 		for (const h of ['X-Auth-Token', 'Ocp-Apim-Subscription-Key', 'X-RapidAPI-Key', 'X-Session']) expect(issue({ ...base, headers: { [h]: 'x' } }), h).toMatch(/carries a key/);
 		expect(issue({ ...base, headers: { Host: 'evil.example' } })).toMatch(/set by the app/);
 		expect(issue({ ...base, headers: { Cookie: 'a=b' } })).toMatch(/set by the app/);
