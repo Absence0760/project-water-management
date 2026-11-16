@@ -400,13 +400,13 @@ describe('live requests outside the fetcher Lambda', () => {
 
 describe('userAgent (CHC asked for a contact in it, issue #604)', () => {
 	it('names the product and the repo, and the contact when one is given', () => {
-		expect(userAgent(undefined)).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)');
-		expect(userAgent(' ops@example.com ')).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management; ops@example.com)');
+		expect(userAgent(undefined)).toBe('water-management-feeds/1 (+https://github.com/jaredhoward-dev/project-water-management)');
+		expect(userAgent(' ops@example.com ')).toBe('water-management-feeds/1 (+https://github.com/jaredhoward-dev/project-water-management; ops@example.com)');
 	});
 
 	it('leaves out a contact that is not an address, so nothing unchecked reaches the header', () => {
 		for (const bad of ['', 'nobody', 'ops@example.com)\r\nX-Evil: 1', 'ops@example.com; other', '<ops@example.com>']) {
-			expect(userAgent(bad), bad).toBe('water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)');
+			expect(userAgent(bad), bad).toBe('water-management-feeds/1 (+https://github.com/jaredhoward-dev/project-water-management)');
 		}
 	});
 

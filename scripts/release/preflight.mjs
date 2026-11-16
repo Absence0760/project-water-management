@@ -47,7 +47,7 @@
 //        REQUIRED_CONFIG (comma-separated env var names that must be set),
 //        CI_WAIT_SECONDS (default 5400), GITHUB_OUTPUT.
 // Usage (local):  RELEASE_TAG=web@0.1.0 GITHUB_EVENT_NAME=workflow_dispatch \
-//                 GITHUB_REPOSITORY=Absence0760/project-water-management \
+//                 GITHUB_REPOSITORY=jaredhoward-dev/project-water-management \
 //                 node scripts/release/preflight.mjs web
 // Tests:          node --test scripts/release/preflight.test.mjs
 

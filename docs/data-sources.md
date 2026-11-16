@@ -135,7 +135,7 @@ in `infra/feeds.tf`):
   `Retry-After` (at most 15 min, 60 s when it gives none); a 403 pauses it
   for an hour in that process, and the scheduler then backs the feed off
   2 h × 2ⁿ (`242_feed_refused_backoff.sql`).
-- **User-Agent:** `water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)`,
+- **User-Agent:** `water-management-feeds/1 (+https://github.com/jaredhoward-dev/project-water-management)`,
   which names the project but **no contact address**. R1-B's polite client
   (`ingest/polite.py`, `INGEST_CONTACT`) adds one.
 - **Offline:** `FEED_SOURCE=fixtures` (the default) serves synthetic files,

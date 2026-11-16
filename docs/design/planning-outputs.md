@@ -5,7 +5,7 @@ sketched with a chat assistant (received 2026-09-26). The sketches used
 hypothetical figures for the client catchment; they are **not committed**
 (the repo is public and they name the catchment and its users). This doc
 describes them generically. The build is tracked in
-[issue #53](https://github.com/Absence0760/project-water-management/issues/53).
+[issue #53](https://github.com/jaredhoward-dev/project-water-management/issues/53).
 Built: R1 (`demand.scale`, engine 0.41.0,
 [scenarios.md](../scenarios.md)), R2's sweeps (§3.2), R3's equal-share board
 ([ui.md § Share the pain](../ui.md#share-the-pain); one equal % for every

@@ -915,7 +915,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    each deploy workflow).
 9a. **Approval gate.** Confirm the `production` environment exists with you
    as a required reviewer:
-   `gh api repos/Absence0760/project-water-management/environments/production --jq '.protection_rules'`.
+   `gh api repos/jaredhoward-dev/project-water-management/environments/production --jq '.protection_rules'`.
    If not: `cd ~/github/templates && ./scripts/backfill-prod-environment.sh --apply`.
    Required reviewers need a **public** repo (or GitHub Pro/Team for a
    private one); the release preflight refuses to deploy without them.

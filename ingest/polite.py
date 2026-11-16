@@ -46,7 +46,7 @@ from typing import Callable
 
 log = logging.getLogger("ingest")
 
-USER_AGENT = "water-management-ingest/1 (+https://github.com/Absence0760/project-water-management)"
+USER_AGENT = "water-management-ingest/1 (+https://github.com/jaredhoward-dev/project-water-management)"
 
 
 class StopRun(Exception):

@@ -1899,7 +1899,7 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     per row per file) is cut short and takes several times that
     ([deployment.md § Re-enabling the CHIRPS feeds](./deployment.md#re-enabling-the-chirps-feeds-issue-604)).
   - **The contact.** The user agent is `water-management-feeds/1
-    (+https://github.com/Absence0760/project-water-management; <FEEDS_CONTACT>)`
+    (+https://github.com/jaredhoward-dev/project-water-management; <FEEDS_CONTACT>)`
     when `FEEDS_CONTACT` is set (`userAgent`): required on the production
     fetcher (`config/production.ts`: an address, not a reserved domain or a
     template's), set from Terraform's `feeds_contact`, optional elsewhere.

@@ -1014,7 +1014,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.18 Automatic calibration
 
-> **Superseded in part by [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> **Superseded in part by [issue #4](https://github.com/jaredhoward-dev/project-water-management/issues/4)**
 > (Phases 4–5): the optimiser is **DDS** (not Nelder–Mead), the objectives add
 > KGE′, non-parametric KGE, NSE on √Q/log Q and FDC signatures, and it fits the
 > GR4J parameters as well as the legacy ones (until engine 1.0.0 removed the
@@ -1310,7 +1310,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.24 H1 volume-conserving event response
 
-> **Specified in [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> **Specified in [issue #4](https://github.com/jaredhoward-dev/project-water-management/issues/4)**
 > (Phases 1–3, 6–7): the proposed model is **GR4J** (X2 = 0) behind a
 > `RunoffModel` interface, with IHACRES-CMD as the benchmark and the legacy
 > model kept as the baseline until sign-off. The issue has the equations, the

@@ -82,7 +82,7 @@ last_modified_version() {
 }
 
 command -v sops > /dev/null || die "sops not found on PATH (docs/deployment.md § Prerequisites)."
-[ -f "$secrets" ] || die "no sops file at $secrets. Clone Absence0760/infra-secrets beside this repo, or set WM_SECRETS_FILE."
+[ -f "$secrets" ] || die "no sops file at $secrets. Clone jaredhoward-dev/infra-secrets beside this repo, or set WM_SECRETS_FILE."
 if [ "${1:-}" = "--preflight" ]; then
 	[ $# -eq 1 ] || die "--preflight takes no other arguments."
 	[ -n "${TF_VAR_runtime_secret_version:-}" ] || last_modified_version > /dev/null
