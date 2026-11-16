@@ -803,16 +803,15 @@ jobs:
   # Secret scan, called so a detection fails the gate. UNGATED on purpose: a
   # pasted credential arrives in a markdown file as easily as in code, and a
   # docs-only diff skips every code-gated job.
-  gitleaks:
-    name: Secret scan (gitleaks)
+  secret-scan:
+    name: Secret scan (trufflehog)
     permissions:
       contents: read
-      pull-requests: read
     # `./`, not GitHub's `$/` self-repository form (zizmor self-repository,
     # suppressed): actionlint 1.7.12, which CI's workflow-lint runs, rejects
     # `$/` (rhysd/actionlint#711), and a job-level reusable-workflow call is
     # resolved from this commit by GitHub, not read from a runner workspace.
-    uses: ./.github/workflows/gitleaks.yml # zizmor: ignore[self-repository]
+    uses: ./.github/workflows/secret-scan.yml # zizmor: ignore[self-repository]
 
   # Single required status check for branch protection (docs/USING.md
   # "The CI gate"). It fans in on every job above via `needs` + always(),
@@ -825,7 +824,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, test-west, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, ingest, verify, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, test-west, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, ingest, verify, terraform, secret-scan]
     steps:
       - name: Require every upstream job to have passed
         env:
