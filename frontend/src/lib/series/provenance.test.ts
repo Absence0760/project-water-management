@@ -144,6 +144,7 @@ describe('feedMark', () => {
 		expect(feedMark({ source: 'chirps', days: 400 }, 400)).toBe('Written by the CHIRPS daily rainfall feed');
 		expect(feedMark({ source: 'chirps_gefs', days: 16 })).toBe('Written by the CHIRPS-GEFS rainfall forecast feed');
 		expect(feedMark({ source: 'dws', days: 30 }, null)).toBe('Written by the DWS gauge flow feed');
+		expect(feedMark({ source: 'station_api', days: 30 }, null)).toBe('Written by the Weather station API feed');
 		// An unknown source (a newer backend) still says something true.
 		expect(feedMark({ source: 'era5', days: 3 }, 3)).toBe('Written by the era5 feed');
 	});

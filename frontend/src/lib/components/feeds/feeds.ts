@@ -8,8 +8,9 @@ import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '#
 import { ApiError } from '#lib/api/client.js';
 import { fmtDay, fmtNum, fmtStamp, fmtWhen, localIsoDate } from '#lib/format/number.js';
 import { kindLabel } from '#lib/series/kinds.js';
+import type { StationFormat } from '@water-management/engine/station-format';
 
-export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws' | 'ecmwf_ens' | 'agera5_et0';
+export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws' | 'ecmwf_ens' | 'agera5_et0' | 'station_api';
 /** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
 export type ChirpsProduct = 'sat' | 'rnl';
 export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled' | 'copy-behind';
@@ -37,6 +38,44 @@ export interface BoundaryMark {
 	areaKm2: number;
 }
 
+/** How a station API feed sends its key (backend feeds/config.ts StationAuth); the key itself is the credential. */
+export type StationAuthBody =
+	| { kind: 'none' }
+	| { kind: 'bearer' }
+	| { kind: 'header'; name: string; prefix: string }
+	| { kind: 'query'; name: string }
+	| { kind: 'basic' };
+
+/**
+ * A station API feed's config (issue #784; backend feeds/config.ts StationApiConfig): the URL template, how the key
+ * is sent and how to read the answer (the engine's StationFormat). Never the key: it is sealed apart.
+ */
+export interface StationApiConfigBody {
+	url: string;
+	station?: string;
+	auth: StationAuthBody;
+	headers?: Record<string, string>;
+	urlTimeFormat?: string;
+	maxDaysPerRequest?: number;
+	revisionDays?: number;
+	startDate?: string;
+	format: StationFormat;
+}
+
+/** A key as the API takes it, write-only: POST's and PATCH's `credential` (null clears it). */
+export interface StationCredentialBody {
+	secret: string;
+	/** Basic only: the user name. */
+	user?: string;
+}
+
+/** What a station feed's list entry says about its key: whether one is saved and its last characters, never the key. */
+export interface FeedCredential {
+	saved: boolean;
+	hint: string | null;
+	updatedAt: string | null;
+}
+
 export interface FeedMeta {
 	id: string;
 	source: FeedSource;
@@ -51,7 +90,12 @@ export interface FeedMeta {
 		boundary?: BoundaryMark;
 		/** The land unit's parcel the cells came from (issue #482, …/feeds/chirps/from-units): the feed writes that unit's own rain. */
 		unit?: { nodeId: string; featureId: string; updatedAt: string; areaKm2: number };
+		/** A station API feed (issue #784): its URL template and how its key is sent. */
+		url?: string;
+		auth?: StationAuthBody;
 	};
+	/** A station API feed's key: saved or not, and its last characters (never the key). Absent for other sources. */
+	credential?: FeedCredential;
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
@@ -142,6 +186,8 @@ export interface FeedList {
 	schedules: string[];
 	/** fixtures: this server reads synthetic files, not the real sources. */
 	mode: 'fixtures' | 'live';
+	/** Whether a weather station API feed may be attached here (backend STATION_API_FEEDS); absent on an older server. */
+	stationApiFeeds?: boolean;
 	/** Our CHIRPS copy, when CHIRPS feeds read it; null (or absent, an older server) when they read CHC's files directly. */
 	rainCopy?: RainCopy | null;
 	canEdit: boolean;
@@ -150,13 +196,24 @@ export interface FeedList {
 
 export interface FeedBody {
 	source: FeedSource;
-	config: ({ cells: GridCell[] } | { bbox: Bbox; skipNoData?: true }) & { product?: ChirpsProduct; startDate?: string } | { station: string };
+	config: (({ cells: GridCell[] } | { bbox: Bbox; skipNoData?: true }) & { product?: ChirpsProduct; startDate?: string }) | { station: string } | StationApiConfigBody;
 	targetKind: string;
 	targetName: string;
 	schedule: 'daily';
+	/** A station API feed's key, sent once and never read back; left out when none was typed. */
+	credential?: StationCredentialBody;
 	/** The owner confirmed replacing a target that holds another product or version (issue #40c). */
 	replaceSeries?: boolean;
 }
+
+/** POST's and PATCH's answer: the feed, and a warning when it saved one that can't fetch yet (backend routes.ts credentialWarning). */
+export interface FeedSaved {
+	feed: FeedMeta;
+	warning?: string;
+}
+
+/** The API's warning as a sentence after the action's message (" Note: the feed sends a key but none is saved: …."), or ''. */
+export const warningText = (w: string | undefined) => (w ? ` Note: ${w.trim().replace(/[.\s]+$/, '')}.` : '');
 
 /** A boundary cell in the proposal: its weight in the mean and the share of it inside the boundary. */
 export interface BoundaryCell {
@@ -257,8 +314,9 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 	const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
 	return {
 		list: () => api.request<FeedList>('GET', base),
-		create: (body: FeedBody) => api.request<{ feed: FeedMeta }>('POST', base, body).then((r) => r.feed),
-		update: (id: string, patch: Partial<FeedBody> & { enabled?: boolean; replaceSeries?: boolean }) => api.request<{ feed: FeedMeta }>('PATCH', one(id), patch).then((r) => r.feed),
+		/** The feed, and the API's `warning` when it saved one that can't fetch yet (a station feed with no key). */
+		create: (body: FeedBody) => api.request<FeedSaved>('POST', base, body),
+		update: (id: string, patch: Partial<Omit<FeedBody, 'credential'>> & { enabled?: boolean; replaceSeries?: boolean; credential?: StationCredentialBody | null }) => api.request<FeedSaved>('PATCH', one(id), patch),
 		remove: (id: string) => api.request<void>('DELETE', one(id)),
 		runNow: (id: string) => api.request<{ created: boolean }>('POST', `${one(id)}/run-now`),
 		/** The cells of `source`'s grid the map's catchment boundary covers, and what applying them would do (issue #326 B-rain). */
@@ -480,6 +538,8 @@ export const describeWrites = (f: Pick<FeedMeta, 'writes'>) => (f.writes ? ` · 
 /** Where a feed reads, in words. */
 export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	if (f.source === 'dws') return `station ${f.config.station ?? '?'}`;
+	// The host and station, never the URL's path or query (backend feedDescription does the same).
+	if (f.source === 'station_api') return `${stationApiHost(f.config.url) ?? 'its API'}${f.config.station ? `, station ${f.config.station}` : ''}`;
 	const b = f.config.bbox;
 	// At least two decimals (a box is usually drawn on the 0.05° grid); a plain "-", as the cell line writes it.
 	const deg = (v: number) => (Math.abs(Math.round(v * 100) - v * 100) < 1e-6 ? v.toFixed(2) : String(v));
@@ -527,6 +587,37 @@ export const STATE_LABELS: Record<FeedState, string> = {
 	disabled: 'Off',
 	'copy-behind': 'Copy behind'
 };
+
+/** The host a station API feed's URL template names, or null (its placeholders filled by a stand-in to parse it). */
+export function stationApiHost(url: string | undefined): string | null {
+	return url ? (URL.parse(url.trim().replace(/\{(station|start|end)\}/g, 'x'))?.hostname ?? null) : null;
+}
+
+/**
+ * A station API feed's key line on its card (issue #784): "Key saved · ends …abcd", "No key saved", or null for a
+ * feed that sends none and has none (or any other source). The key itself is never in the list.
+ */
+export function credentialLine(f: Pick<FeedMeta, 'source' | 'config' | 'credential'>): string | null {
+	if (f.source !== 'station_api') return null;
+	const c = f.credential;
+	if (c?.saved) {
+		const hint = c.hint?.replace(/^(…|\.\.\.)/, '');
+		return hint ? `Key saved · ends …${hint}` : 'Key saved';
+	}
+	if (f.config.auth?.kind === 'none' || !f.config.auth) return null;
+	return 'No key saved: the feed can’t sign in to its API until an owner adds one.';
+}
+
+/** A replacement key (the card's Replace key) as PATCH sends it, or what is missing. Never an empty secret or user name. */
+export function credentialPatch(secret: string, user: string, basic: boolean): { credential: StationCredentialBody } | { error: string } {
+	const s = secret.trim();
+	if (!s) return { error: basic ? 'Enter the new password.' : 'Enter the new key.' };
+	if (s.length > 4096) return { error: 'The key is too long (at most 4096 characters).' };
+	const u = user.trim();
+	if (u.length > 256) return { error: 'The user name is at most 256 characters.' };
+	// The user name only for Basic, and only when typed (the API takes none rather than an empty one).
+	return { credential: basic && u ? { secret: s, user: u } : { secret: s } };
+}
 
 /** "Last data 21 Sep 2026 · checked today 06:00" (fmtWhen: "yesterday 06:00", "24 Sep 2026 06:00"), or what is missing. */
 export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'>, now: Date = new Date()): string {
@@ -680,7 +771,9 @@ export function separateName(
 	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
 ): string {
 	const base =
-		'station' in body.config
+		body.source === 'station_api'
+			? `Station ${'station' in body.config && body.config.station ? body.config.station : (stationApiHost('url' in body.config ? body.config.url : undefined) ?? '')}`.trim()
+			: 'station' in body.config
 			? `DWS ${body.config.station}`
 			: body.source === 'chirps_gefs'
 				? 'CHIRPS-GEFS'
