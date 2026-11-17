@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Dependabot #793: maplibre-gl 6.16.0 -> 6.17.0 (sparse vector sources, camera task scheduling). Measured locally on main @ 47796b90b with the minor-and-patch bumps except vite: total 2486 KB against 2485 (+1 KB; main itself measures 2485 in CI). The map library's lazy chunks went 445 -> 446 KB. Headroom 0 KB."
+}
