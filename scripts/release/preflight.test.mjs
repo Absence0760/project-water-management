@@ -76,7 +76,7 @@ test('missing config lists every empty or unset name', () => {
 });
 
 const SHA = 'a'.repeat(40);
-const REPO = 'Absence0760/project-water-management';
+const REPO = 'jaredhoward-dev/project-water-management';
 const actions = { id: 15368, slug: 'github-actions' };
 const ciRun = (over = {}) => ({ path: '.github/workflows/ci.yml', event: 'push', head_sha: SHA, head_repository: REPO, ...over });
 

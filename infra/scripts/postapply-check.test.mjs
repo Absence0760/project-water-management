@@ -5,7 +5,7 @@
 // and jq. No AWS account, no network.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -65,14 +65,17 @@ function healthyCurl() {
 	};
 }
 
-function run({ aws = {}, curl = {}, args = ['--profile', 'water-management', '--region', 'af-south-1', '--domain', 'water.example.test'], varFile } = {}) {
+function run({ aws = {}, curl = {}, args = ['--profile', 'water-management', '--region', 'af-south-1', '--domain', 'water.example.test'], varFile, varName = 'prod.tfvars' } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'postapply-check-'));
-	for (const tool of ['aws', 'curl']) {
+	// A fake sops too: it "decrypts" a *.sops var file by copying it.
+	for (const [tool, stub] of [['aws', 'check-stubs/aws.mjs'], ['curl', 'check-stubs/curl.mjs'], ['sops', 'tf-stubs/sops.mjs']]) {
 		const p = join(dir, tool);
-		writeFileSync(p, `#!/bin/sh\nexec node ${join(here, `check-stubs/${tool}.mjs`)} "$@"\n`);
+		writeFileSync(p, `#!/bin/sh\nexec node ${join(here, stub)} "$@"\n`);
 		chmodSync(p, 0o755);
 	}
-	const f = { aws: join(dir, 'aws.json'), awsLog: join(dir, 'aws.log'), curl: join(dir, 'curl.json'), curlLog: join(dir, 'curl.log'), vars: join(dir, 'prod.tfvars') };
+	const f = { aws: join(dir, 'aws.json'), awsLog: join(dir, 'aws.log'), curl: join(dir, 'curl.json'), curlLog: join(dir, 'curl.log'), sopsLog: join(dir, 'sops.log'), tmp: join(dir, 'tmp'), vars: join(dir, varName) };
+	mkdirSync(f.tmp);
+	writeFileSync(f.sopsLog, '');
 	writeFileSync(f.aws, JSON.stringify({ ...healthyAws(), ...aws }));
 	writeFileSync(f.curl, JSON.stringify({ ...healthyCurl(), ...curl }));
 	writeFileSync(f.awsLog, '');
@@ -84,7 +87,7 @@ function run({ aws = {}, curl = {}, args = ['--profile', 'water-management', '--
 	}
 	const r = spawnSync('bash', [script, ...args, ...extra], {
 		encoding: 'utf8',
-		env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, FAKE_AWS_STATE: f.aws, FAKE_AWS_LOG: f.awsLog, FAKE_CURL_STATE: f.curl, FAKE_CURL_LOG: f.curlLog },
+		env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TMPDIR: f.tmp, FAKE_AWS_STATE: f.aws, FAKE_AWS_LOG: f.awsLog, FAKE_CURL_STATE: f.curl, FAKE_CURL_LOG: f.curlLog, FAKE_SOPS_LOG: f.sopsLog },
 	});
 	const lines = (p) => readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 	const out = r.stdout.split('\n');
@@ -92,6 +95,8 @@ function run({ aws = {}, curl = {}, args = ['--profile', 'water-management', '--
 		...r,
 		aws: lines(f.awsLog),
 		curl: lines(f.curlLog),
+		sops: lines(f.sopsLog),
+		leftover: readdirSync(f.tmp),
 		line: (name, path = '') => out.find((l) => new RegExp(`^(PASS|WARN|FAIL)  ${name} `).test(l) && l.includes(path)) ?? '',
 		count: (level) => out.filter((l) => l.startsWith(`${level}  `)).length,
 	};
@@ -244,6 +249,20 @@ test('the domain and region come from the var file; usage errors exit 2 before a
 	assert.match(none.stderr, /pass --domain/);
 	assert.equal(none.aws.length + none.curl.length, 0);
 	assert.equal(run({ args: ['--region', 'af-south-1', '--domain', 'x', '--fix'] }).status, 2);
+});
+
+test('the domain and region come from a *.sops var file, decrypted as --profile and removed after', () => {
+	const r = run({ args: ['--profile', 'water-management'], varName: 'prod.tfvars.sops', varFile: 'aws_region = "af-south-1"\ndomain_name = "water.example.test"\n' });
+	assert.equal(r.status, 0, r.stdout + r.stderr);
+	assert.equal(r.sops.length, 1);
+	assert.deepEqual(r.sops[0].args.slice(0, 5), ['--decrypt', '--input-type', 'binary', '--output-type', 'binary']);
+	assert.equal(r.sops[0].profile, 'water-management');
+	assert.match(r.stdout, /region af-south-1, site https:\/\/water\.example\.test/);
+	assert.deepEqual(r.leftover, [], 'the decrypted copy is gone');
+
+	const bad = run({ args: [], varName: 'prod.tfvars.sops', varFile: 'aws_region = "af-south-1"\n' });
+	assert.equal(bad.status, 2, 'no domain in it: a usage error, still cleaned up');
+	assert.deepEqual(bad.leftover, []);
 });
 
 test('--redirect-from: a former hostname 301s a page to the same path on the site, and its /api still answers', () => {

@@ -1083,3 +1083,135 @@ run "alert_topic_policies" {
     error_message = "Only CloudWatch, RDS events, EventBridge (the KMS key alarm), Budgets and Cost Anomaly Detection may publish to the alert topics."
   }
 }
+
+# --- Org move: old + new owner subjects (Absence0760/project-mgmt#14) ----------
+
+# During the org move (Absence0760/project-mgmt#14) the bootstrap trusts the
+# old and the new owner's subject; naming the new owner lets the plan through.
+run "accepts_old_and_new_owner_during_org_move" {
+  command = plan
+  variables {
+    github_migration_owners = ["new-org"]
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:Absence0760@21693150/project-water-management@456:environment:production\",\"repo:new-org@789/project-water-management@456:environment:production\"]}}}]}"
+    }
+  }
+}
+
+# The same trust with github_migration_owners left empty is refused: a second
+# owner is never accepted by default.
+run "refuses_two_owners_without_the_migration_owner" {
+  command = plan
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:Absence0760@21693150/project-water-management@456:environment:production\",\"repo:new-org@789/project-water-management@456:environment:production\"]}}}]}"
+    }
+  }
+  expect_failures = [data.aws_iam_role.github_deploy]
+}
+
+# Naming the migration owner widens only the owner, never the repo name.
+run "refuses_a_migration_owner_for_another_repo" {
+  command = plan
+  variables {
+    github_migration_owners = ["new-org"]
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:Absence0760@21693150/project-water-management@456:environment:production\",\"repo:new-org@789/other@999:environment:production\"]}}}]}"
+    }
+  }
+  expect_failures = [data.aws_iam_role.github_deploy]
+}
+
+# Each accepted owner gets at most one subject.
+run "refuses_two_subjects_for_one_owner" {
+  command = plan
+  variables {
+    github_migration_owners = ["new-org"]
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:Absence0760@21693150/project-water-management@456:environment:production\",\"repo:Absence0760@21693150/project-water-management@999:environment:production\"]}}}]}"
+    }
+  }
+  expect_failures = [data.aws_iam_role.github_deploy]
+}
+
+# The new owner's subject is still pinned to the production environment.
+run "refuses_a_migration_owner_subject_for_a_branch" {
+  command = plan
+  variables {
+    github_migration_owners = ["new-org"]
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:Absence0760@21693150/project-water-management@456:environment:production\",\"repo:new-org@789/project-water-management@456:ref:refs/heads/main\"]}}}]}"
+    }
+  }
+  expect_failures = [data.aws_iam_role.github_deploy]
+}
+
+# --- Org move, after the trim (project-mgmt#14 step 18) ------------------------
+#
+# The trim leaves the role trusting only the new owner's subject. The order
+# that keeps this check passing: trim the role first (github_repo still names
+# the old owner, github_migration_owners the new one), then set github_repo to
+# the new owner and empty github_migration_owners in one edit.
+
+# Step 1 done: the role trusts only the new owner; tfvars unchanged.
+run "accepts_only_the_new_owner_after_the_trim" {
+  command = plan
+  variables {
+    github_migration_owners = ["new-org"]
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:new-org@789/project-water-management@456:environment:production\"]}}}]}"
+    }
+  }
+}
+
+# Step 2 done: github_repo names the new owner and the migration list is empty.
+run "accepts_the_new_owner_once_github_repo_moves" {
+  command = plan
+  variables {
+    github_repo             = "new-org/project-water-management"
+    github_migration_owners = []
+  }
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:new-org@789/project-water-management@456:environment:production\"]}}}]}"
+    }
+  }
+}
+
+# Emptying github_migration_owners while github_repo still names the old owner
+# is refused: the new owner's subject then belongs to no accepted owner.
+run "refuses_the_new_owner_alone_without_the_migration_owner" {
+  command = plan
+  override_data {
+    target = data.aws_iam_role.github_deploy
+    values = {
+      name               = "water-management-deploy"
+      assume_role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\",\"token.actions.githubusercontent.com:sub\":[\"repo:new-org@789/project-water-management@456:environment:production\"]}}}]}"
+    }
+  }
+  expect_failures = [data.aws_iam_role.github_deploy]
+}

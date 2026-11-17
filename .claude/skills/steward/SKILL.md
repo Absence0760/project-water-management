@@ -25,7 +25,7 @@ workflows prove nothing. Resolve the conflict first.
 
 The `changes` job decides whether anything besides `docs/`, `.claude/` and
 `*.md` changed. If not, most jobs are skipped (skipped counts as passing).
-Jobs that still run on a docs-only PR: `claude-tooling`, `gitleaks`, and the
+Jobs that still run on a docs-only PR: `claude-tooling`, `secret-scan`, and the
 `pull_request_target` workflows (`pr-title-lint`, `labeler`, `pr-mergeable`).
 So a `.claude/` change is checked by `pnpm check:claude`; run it before
 pushing.
@@ -46,7 +46,7 @@ Run the same command the job runs, scoped to what failed. Never the whole
 | Workbook importer (Python) | `python -m unittest discover -s scripts/wbt-import` |
 | Terraform | `pnpm check:infra` |
 | Renderer image | `pnpm check:renderer-image` (docker, ~3.5 GB; only when the renderer or its pins changed) |
-| gitleaks | the finding names the file and rule; remove the secret and treat it as leaked (rotate), never allowlist a real one |
+| Secret scan (`secret-scan`, TruffleHog) | no local run; the job summary and annotations name status, detector, file, line and commit, never the value. Only verified (live) or unknown fails it: rotate the credential first, then remove it; an unknown one, re-run, then check it by hand. A reviewed unverified false positive gets a `trufflehog:ignore` comment on its line. `pre-commit run gitleaks --all-files` is the local shape check |
 | `pr-title-lint` | the title is `type(scope): lowercase subject` with no trailing period (`.github/workflows/pr-title-lint.yml`) |
 
 Read the failure first: `gh run view <run> --log-failed`, or the job log

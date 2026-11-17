@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { afterAll, describe, expect, it } from 'vitest';
 import { cellCentre, chcCell } from '../feeds/cellCache.js';
-import { FeedRefusedError } from '../feeds/errors.js';
+import { FeedRefusedError, FeedThrottledError } from '../feeds/errors.js';
 import { fixtureHttp } from '../feeds/fixtures.js';
 import type { FeedHttp } from '../feeds/http.js';
 import { GEFS_DAYS, gefsUrl, gridValues } from '../feeds/sources/chirps.js';
@@ -14,7 +14,7 @@ import { ensureDaily, openDaily, readDailyBlock, writeDailyDays } from '../mirro
 import { mirrorCell } from '../mirror/grid.js';
 import { readManifest } from '../mirror/manifest.js';
 import { openStore, type MirrorStore } from '../mirror/store.js';
-import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE } from './daily.js';
+import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE, type ThrottledAttempt } from './daily.js';
 import { GEFS_KEEP_ISSUES, GEFS_REFUSED_KEY, gefsLagMetricLine, gefsProduct, readGefsIndex, readGefsRefused, runGefsIngest, writeGefsIndex } from './gefs.js';
 
 const tmp: string[] = [];
@@ -250,6 +250,84 @@ describe('the daily GEFS pass', () => {
 		expect(r.stopped).toBe('copied');
 		expect(starts).toHaveLength(GEFS_DAYS * 3);
 		expect(starts.slice(1).every((t, i) => t - starts[i]! >= 1000)).toBe(true);
+	});
+
+	it('waits out a 429 and asks the same file again, copying the issue (CHC, 2026-11-10)', async () => {
+		const { store } = freshStore();
+		let clock = 0;
+		const sleeps: number[] = [];
+		const events: ThrottledAttempt[] = [];
+		const inner = filesHttp(issues(TODAY));
+		const target = gefsUrl(TODAY, add(TODAY, 4));
+		let left = 1;
+		const http: FeedHttp = {
+			...inner.http,
+			rangeTagged: async (u, s, e) => {
+				if (u === target && left-- > 0) throw new FeedThrottledError(429, 12);
+				return inner.http.rangeTagged!(u, s, e);
+			}
+		};
+		const r = await run(store, http, TODAY, {
+			intervalMs: 1000,
+			now: () => clock,
+			sleep: async (ms) => void (sleeps.push(ms), (clock += ms)),
+			deadline: 10 * 60_000,
+			onThrottled: (t) => events.push(t)
+		});
+		expect(r).toMatchObject({ stopped: 'copied', copied: TODAY, error: null, refusedAt: null });
+		expect(r.requests).toBe(GEFS_DAYS * 3 + 1);
+		expect(events).toEqual([{ url: target, status: 429, attempt: 1, of: 4, retryAfterSeconds: 12, waitSeconds: 12, retrying: true }]);
+		expect(sleeps).toContain(12_000);
+		expect(await readGefsIndex(store)).toEqual([TODAY]);
+	});
+
+	it('a 429 that outlasts 3 retries ends the run: nothing published, no refusal marker', async () => {
+		const { store } = freshStore();
+		const inner = filesHttp(issues(TODAY, add(TODAY, -1)));
+		const target = gefsUrl(TODAY, add(TODAY, GEFS_DAYS - 1));
+		let asked = 0;
+		const http: FeedHttp = {
+			...inner.http,
+			rangeTagged: async (u, s, e) => {
+				if (u === target) {
+					asked++;
+					throw new FeedThrottledError(503);
+				}
+				return inner.http.rangeTagged!(u, s, e);
+			}
+		};
+		const events: ThrottledAttempt[] = [];
+		const r = await run(store, http, TODAY, { sleep: async () => {}, onThrottled: (t) => events.push(t) });
+		expect(r.stopped).toBe('error');
+		expect(r.error).toBeInstanceOf(FeedThrottledError);
+		expect(asked).toBe(4);
+		expect(events.map((e) => e.retrying)).toEqual([true, true, true, false]);
+		expect(r.requests).toBe(4);
+		expect(await readGefsIndex(store)).toBeNull();
+		expect(await readGefsRefused(store)).toBeNull();
+	});
+
+	it('does not retry a 429 when the deadline leaves no room for the wait', async () => {
+		const { store } = freshStore();
+		let clock = 0;
+		const inner = filesHttp(issues(TODAY));
+		let asked = 0;
+		const http: FeedHttp = { ...inner.http, rangeTagged: async () => (asked++, Promise.reject(new FeedThrottledError(429))) };
+		const events: ThrottledAttempt[] = [];
+		const r = await run(store, http, TODAY, { now: () => clock, sleep: async (ms) => void (clock += ms), deadline: 30_000, onThrottled: (t) => events.push(t) });
+		expect(r.stopped).toBe('error');
+		expect(asked).toBe(1);
+		expect(events).toMatchObject([{ waitSeconds: 60, retrying: false }]);
+	});
+
+	it('never retries a 403', async () => {
+		const { store } = freshStore();
+		const events: ThrottledAttempt[] = [];
+		const { http, log } = filesHttp(new Map<string, Served>([[`${TODAY}/${GEFS_DAYS - 1}`, 'refused']]));
+		const r = await run(store, http, TODAY, { onThrottled: (t) => events.push(t) });
+		expect(r.error).toBeInstanceOf(FeedRefusedError);
+		expect([log.length, r.requests]).toEqual([1, 1]);
+		expect(events).toEqual([]);
 	});
 
 	it('stops at the deadline before a file, publishing nothing', async () => {

@@ -2,7 +2,7 @@
 
 Run 2026-10-26/27 from the dev workstation (check 4 from af-south-1), before anything in Rounds 1–3 is
 built. Round 0 checks five assumptions in the
-[#604 plan](https://github.com/Absence0760/project-water-management/issues/604).
+[#604 plan](https://github.com/jaredhoward-dev/project-water-management/issues/604).
 The scripts are in [`604-round0/`](./604-round0/). They are kept to reproduce
 the results, are not part of the app and are not run by CI.
 
@@ -104,7 +104,7 @@ D1's 5–7 GB estimate, from one month's sample, so it's indicative only.
 
 ```bash
 python3 -m venv venv && ./venv/bin/pip install numpy h5py xarray h5netcdf zarr icechunk
-curl -A 'water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)' -O https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/chirps-v3.0.2024.06.days_p05.nc
+curl -A 'water-management-feeds/1 (+https://github.com/jaredhoward-dev/project-water-management)' -O https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/netcdf/byMonth/chirps-v3.0.2024.06.days_p05.nc
 ./venv/bin/python -I inspect_nc.py chirps-v3.0.2024.06.days_p05.nc
 ./venv/bin/python -I pick.py chirps-v3.0.2024.06.days_p05.nc picked.json   # the 20 cell-days
 ./venv/bin/python -I dyn.py picked.json dyn.json && ./venv/bin/python -I dynbox.py chirps-v3.0.2024.06.days_p05.nc

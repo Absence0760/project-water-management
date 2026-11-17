@@ -1,6 +1,7 @@
 # Copy to terraform.tfvars (gitignored) — or, per the estate pattern, keep the
-# canonical copy in the private repo as infra-secrets/water-management/prod.tfvars
-# and pass it with -var-file (infra/README.md § First apply). Nothing here is
+# canonical copy in the private repo, sops-encrypted, as
+# infra-secrets/water-management/prod.tfvars.sops and pass that with -var-file
+# (scripts/tf.sh decrypts it) (infra/README.md § First apply). Nothing here is
 # secret; secrets come from infra-secrets/water-management/prod.sops.yaml
 # through infra/scripts/tf.sh (ephemeral variables, secrets.tf), never from
 # tfvars.
@@ -28,6 +29,11 @@ redirect_domains = {
 }
 
 github_repo = "Absence0760/project-water-management"
+
+# Org move only (Absence0760/project-mgmt#14): while the bootstrap deploy role
+# trusts both the old and the new owner's subject, name the owner that isn't
+# github_repo's here so oidc.tf's trust check accepts both. Empty otherwise.
+# github_migration_owners = ["<other-owner>"]
 
 # MUST match the slug new-project-account.sh was run with (role <slug>-deploy).
 bootstrap_slug = "water-management"

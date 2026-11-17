@@ -5,7 +5,7 @@
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
 Report it privately through GitHub's private vulnerability reporting: open
-<https://github.com/Absence0760/project-water-management/security/advisories/new>
+<https://github.com/jaredhoward-dev/project-water-management/security/advisories/new>
 (or the repository's **Security** tab → **Report a vulnerability**). Only the
 maintainers see the report, and the fix is coordinated in that draft advisory.
 Include:
@@ -20,7 +20,7 @@ You can expect an acknowledgement within 72 hours and a triage decision within 7
 
 This template ships with the following defensive scaffolding:
 
-- **Secret scanning** — `.github/workflows/gitleaks.yml` scans every push, every PR, and the full history weekly. `.pre-commit-config.yaml` runs the same scan locally before commit.
+- **Secret scanning** — `.github/workflows/secret-scan.yml` runs TruffleHog on every push and every PR (ci.yml's `secret-scan` job, part of the `CI gate`), and `secret-scan-sweep.yml` runs it over the full history weekly; a verified (live) or unverifiable credential fails it. `.pre-commit-config.yaml` runs gitleaks locally before commit.
 - **Dependency review** — `.github/workflows/audit.yml` runs `pnpm audit` / equivalent per workspace and fails on high-severity findings.
 - **Static analysis** — `.github/workflows/security.yml` runs CodeQL (SAST) on the configured languages on every PR + weekly.
 - **Supply-chain scoring** — `.github/workflows/scorecard.yml` runs OpenSSF Scorecard weekly; results flow to the Security tab and to scorecard.dev.
