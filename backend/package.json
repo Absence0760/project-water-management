@@ -37,6 +37,7 @@
 		"import:rivers": "tsx scripts/import-rivers.ts",
 		"import:dam-register": "tsx scripts/import-dam-register.ts",
 		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
+		"gen:feed-credential-key": "tsx scripts/feed-credential-key.ts",
 		"gen:water-fixture": "tsx scripts/water-fixture.ts",
 		"gen:channels-fixture": "tsx scripts/channels-build.ts --fixture",
 		"gen:waterbodies-fixture": "tsx scripts/waterbodies-fixture.ts",

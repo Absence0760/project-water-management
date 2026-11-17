@@ -49,6 +49,8 @@ interface World {
 	revisionId: string;
 	apiKeyId: string;
 	feedId: string;
+	/** A station API feed, switched off: what a sealed key (data_feed_credential, 321) belongs to. */
+	stationFeedId: string;
 	publicationId: string;
 	inviteId: string;
 	reportJobId: string;
@@ -184,6 +186,10 @@ async function world(name: string): Promise<World> {
 		return {
 			// Switched off: only a reference target, and an enabled feed (due at once, with no cells) would be scheduled by a later file's tick and fail there.
 			feedId: await one(`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, acting_user_id, created_by) VALUES ($1, 'chirps', '{}', 'rain_catchment_mm', 'feed', false, $2, $2)`, [projectId, u]),
+			stationFeedId: await one(
+				`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, acting_user_id, created_by) VALUES ($1, 'station_api', '{}', 'rain_catchment_mm', 'station feed', false, $2, $2)`,
+				[projectId, u]
+			),
 			publicationId: await one('INSERT INTO run_publication (project_id, run_id, published_by) VALUES ($1, $2, $3)', [projectId, runId, u]),
 			inviteId: await one(`INSERT INTO invite (email, project_id, project_role, invited_by, token_hash, expires_at) VALUES ($1, $2, 'farmer', $3, $4, now() + interval '7 days')`, [
 				`invitee-${randomUUID()}@example.com`,
@@ -562,6 +568,11 @@ const CASES: Record<string, Case> = {
 		mustRefuse: true,
 		ref: (w) => w.apiKeyId,
 		insert: (h, ref) => [`INSERT INTO audit_event (project_id, actor_api_key_id, actor_label, kind) VALUES ($1, $2, 'Key', 'series.put')`, [h.projectId, ref]]
+	},
+	// A station API feed's sealed key (321): data_feed_credential_stamp holds the feed to the row's project (and to station_api).
+	'data_feed_credential.feed_id': {
+		ref: (w) => w.stationFeedId,
+		insert: (h, ref) => [`INSERT INTO data_feed_credential (feed_id, project_id, sealed) VALUES ($1, $2, 'c2VhbGVk')`, [ref, h.projectId]]
 	},
 	'feed_stage.feed_id': {
 		ref: (w) => w.feedId,
@@ -1356,6 +1367,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'share/links.ts:targetId': ['POST /projects/:id/share-links targetId', 'POST /projects/:id/share-links targetId (pack)'],
 	'share/links.ts:packId': 'a read filter within the project (the share-link list): another project’s pack is 404',
 	'history/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
+	'feeds/fetch.ts:feedId':
+		'the fetch request the feed-fetch job sends the fetcher Lambda, not a client request: the job fills it from its own feed (feedForJob, within the job’s project) to bind the sealed key (credential.ts)',
 	'jobs/handlers/feed-fetch.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts holds every payload to its job’s project',
 	'jobs/handlers/feed-ingest.ts:feedId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',

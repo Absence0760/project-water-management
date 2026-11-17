@@ -117,14 +117,27 @@ import {
 	gridCells,
 	isAreaReplace,
 	isForecastSource,
-	SOURCES
+	SOURCES,
+	type StationApiConfig
 } from './config.js';
+import { stationLastDay } from './sources/station.js';
 import { CellsResult, chirpsPendingFrom, CopyCellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
 
 /** A backfill's next window waits this long, so one fetch after another never floods the source (or a test's tick). */
 export const BACKFILL_NEXT_SECONDS = 60;
+/**
+ * A station API feed's backfill (issue #784) asks a URL anyone with an account may type, up to
+ * STATION_MAX_REQUESTS requests a window, so its windows chain slowly: ten minutes apart, at most 144 a day.
+ */
+export const STATION_BACKFILL_NEXT_SECONDS = 600;
+/**
+ * After this many windows in a row that wrote no day of rain, a station feed's backfill stops chaining and goes on
+ * at its daily fetch (its read position, last_meta.through, still moves on), so a far start date over an empty
+ * answer costs a day's fetch, not a chain of them. A window with rain resets the count (last_meta.emptyWindows).
+ */
+export const STATION_EMPTY_WINDOWS_MAX = 3;
 /**
  * A CHIRPS window the cell cache held whole asked the source for nothing, so
  * the next one needn't wait to spare it: a backfill over cells another feed
@@ -161,12 +174,28 @@ export const COPY_NEXT_SECONDS = 0;
  * today. Before 296 an `agera5_et0` feed was measured against today, which its
  * window never reaches, so it queued another fetch a minute after every one.
  */
-const caughtUp = (feed: FeedRow, window: FetchWindow) =>
-	window.end >= (feed.source === 'chirps' || feed.source === 'agera5_et0' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
+const caughtUp = (feed: FeedRow, window: FetchWindow) => window.end >= newestPossibleDay(feed);
 
-async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false): Promise<void> {
+/**
+ * The newest day a feed's window can end on now, as fetchWindow ends it: yesterday for CHIRPS and reference ET,
+ * today for DWS, and for a station API feed the newest rain day its station can have finished (sources/station.ts
+ * stationLastDay, the same function fetchWindow ends its window with), so a caught-up station feed never queues
+ * another fetch at once (the chain 296 broke for agera5_et0).
+ */
+function newestPossibleDay(feed: FeedRow): string {
+	const today = utcToday();
+	if (feed.source === 'station_api') return stationLastDay((feed.config as StationApiConfig).format, Date.now(), today);
+	return feed.source === 'chirps' || feed.source === 'agera5_et0' ? fromEpochDay(toEpochDay(today) - 1) : today;
+}
+
+async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false, emptyWindows = 0): Promise<void> {
 	// `more`: a caught-up CHIRPS feed with re-check work left (stale finals to read, revised days to refresh).
 	if (isForecastSource(feed.source) || (caughtUp(feed, window) && !more)) return;
+	// A station feed: slower, and not at all after STATION_EMPTY_WINDOWS_MAX empty windows (its daily fetch goes on).
+	if (feed.source === 'station_api') {
+		if (emptyWindows >= STATION_EMPTY_WINDOWS_MAX) return;
+		delaySeconds = Math.max(delaySeconds, STATION_BACKFILL_NEXT_SECONDS);
+	}
 	await enqueueJob(db, {
 		projectId: feed.projectId,
 		kind: 'feed_fetch',
@@ -247,7 +276,7 @@ export function finalThroughAfter(feed: FeedRow, result: OkResult, window: Fetch
 
 /** The fetcher's meta without the keys only we write (a fetcher's `finalThrough` is a claim, checked above, never stored as is). */
 function fetcherMeta(result: OkResult): Record<string, string | number> {
-	const { finalThrough: _claim, revisionXmin: _ours, ...rest } = result.meta;
+	const { finalThrough: _claim, revisionXmin: _ours, emptyWindows: _count, ...rest } = result.meta;
 	return rest;
 }
 
@@ -322,7 +351,7 @@ const withFinal = (meta: Record<string, string | number>, finalThrough: string |
  * answer. Every other feed records none.
  */
 function checkCellsUsed(feed: FeedRow, result: OkResult): { cellsUsed: number | null } | { error: string } {
-	const grid = feed.source === 'dws' ? null : (feed.config as GridConfig);
+	const grid = feed.source === 'dws' || feed.source === 'station_api' ? null : (feed.config as GridConfig);
 	const prev = feed.cellsUsed ?? null;
 	if (!grid?.bbox || !grid.skipNoData) return { cellsUsed: null };
 	const got = result.meta.cellsUsed;
@@ -698,15 +727,23 @@ export async function ingestResult(
 		const worked = Number(checked.meta.filesChecked ?? 0) > 0 || Number(checked.meta.recheckDaysRead ?? 0) > 0;
 		more = r.more || (worked && (await staleLeft(db, origin, chirpsProduct(feed.config as GridConfig), uniqueCells(gridCells(feed.config as GridConfig)))));
 	}
+	// A station feed counts the windows in a row that wrote no day (STATION_EMPTY_WINDOWS_MAX).
+	let emptyWindows = 0;
+	if (feed.source === 'station_api' && lastDate === null) {
+		const { rows } = await db.query<{ n: string | null }>(`SELECT last_meta->>'emptyWindows' AS n FROM data_feed WHERE id = $1`, [feed.id]);
+		const prev = Number(rows[0]?.n ?? 0);
+		emptyWindows = (Number.isInteger(prev) && prev >= 0 ? prev : 0) + 1;
+	}
 	// Ours last, so a key of the same name in the fetcher's meta never stands.
+	// emptyWindows: a station feed's windows in a row with no day written (only when there are some).
 	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
 	// finalThrough: how far the series is final (CHIRPS; finalThroughAfter).
 	// revisionXmin: where the next refresh of revised days looks from (CHIRPS; refreshRevisedDays).
 	const meta =
 		isForecastSource(feed.source)
 			? { ...fetcherMeta(checked), merged, kept }
-			: withRevision(withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end }, finalThroughAfter(feed, checked, window)), revision);
+			: withRevision(withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end, ...(emptyWindows ? { emptyWindows } : {}) }, finalThroughAfter(feed, checked, window)), revision);
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
-	await continueBackfill(db, feed, window, nextSeconds, more);
+	await continueBackfill(db, feed, window, nextSeconds, more, emptyWindows);
 	return { merged, lastDate };
 }

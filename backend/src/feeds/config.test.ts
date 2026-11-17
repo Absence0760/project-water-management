@@ -6,6 +6,7 @@ import {
 	BBOX_MAX_CELLS,
 	BBOX_MAX_ROWS,
 	CHIRPS_FIRST_DAY,
+	credentialProblem,
 	FEED_SOURCES,
 	FeedInput,
 	FeedPatch,
@@ -17,7 +18,10 @@ import {
 	isAreaReplace,
 	isForecastSource,
 	sameArea,
-	SOURCES
+	SOURCES,
+	StationApiConfig,
+	type StationApiConfig as StationApiConfigT,
+	stationUrlProblem
 } from './config.js';
 
 const cells = [{ lat: -20.12, lon: 25.17 }];
@@ -39,7 +43,7 @@ describe('FeedInput', () => {
 	});
 
 	it('an ECMWF ENS forecast feed (issue #604 R4-C): grid cells or a box, writing the forecast series, no CHIRPS product', () => {
-		expect(FEED_SOURCES).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0']);
+		expect(FEED_SOURCES).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0', 'station_api']);
 		expect(FeedInput.parse({ source: 'ecmwf_ens', config: { cells } })).toMatchObject({ source: 'ecmwf_ens', targetKind: 'rain_forecast_mm', config: { cells: [{ ...cells[0], weight: 1 }] } });
 		expect(FeedInput.safeParse({ source: 'ecmwf_ens', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 }, skipNoData: true } }).success).toBe(true);
 		expect(FeedInput.safeParse({ source: 'ecmwf_ens', config: { cells, product: 'sat' } }).error?.issues[0]?.message).toBe('only a CHIRPS feed has a daily product');
@@ -166,6 +170,118 @@ describe('FeedPatch', () => {
 	it('takes any subset, and nothing unknown', () => {
 		expect(FeedPatch.parse({ enabled: false })).toEqual({ enabled: false });
 		expect(FeedPatch.safeParse({ lastSuccessAt: '2026-01-01' }).success).toBe(false);
+	});
+
+	it('takes a key to save, null to clear it, and nothing else in it', () => {
+		expect(FeedPatch.parse({ credential: { secret: 'k-12345678' } })).toEqual({ credential: { secret: 'k-12345678' } });
+		expect(FeedPatch.parse({ credential: null })).toEqual({ credential: null });
+		expect(FeedPatch.safeParse({ credential: { secret: '' } }).success).toBe(false);
+		expect(FeedPatch.safeParse({ credential: { secret: 'k', sealed: 'x' } }).success).toBe(false);
+	});
+});
+
+describe('a station API feed (issue #784)', () => {
+	const format = { format: 'json', records: 'data', time: 't', value: 'rain', timeFormat: 'iso', resolution: 'daily' } as const;
+	const base = { url: 'https://api.example.com/v1/stations/{station}/rain?from={start}&to={end}', station: 'ST-1', auth: { kind: 'bearer' }, format };
+	const issue = (config: unknown) => StationApiConfig.safeParse(config).error?.issues[0]?.message;
+
+	it('parses a URL template, auth and format, and writes the catchment rain series', () => {
+		const input = FeedInput.parse({ source: 'station_api', config: base, credential: { secret: 'a-long-enough-secret-abcd' } });
+		expect(input).toMatchObject({ source: 'station_api', targetKind: 'rain_catchment_mm', credential: { secret: 'a-long-enough-secret-abcd' } });
+		expect(SOURCES.station_api.kinds).toEqual(['rain_catchment_mm']);
+		expect(feedProvenance('station_api', input.config)).toBeNull();
+		expect(feedSourceText('station_api', input.config)).toBe('Weather station API data feed, api.example.com, station ST-1');
+		expect(feedStaleAfterDays('station_api', input.config)).toBe(3);
+		// The key stays out of the config.
+		expect(JSON.stringify(input.config)).not.toContain('a-long-enough-secret');
+	});
+
+	it('refuses a key in the URL, pointing at the key field', () => {
+		for (const k of ['api_key', 'apikey', 'token', 'access_token', 'Key', 'signature']) {
+			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc&from={start}` }), k).toMatch(new RegExp(`the URL carries a key \\(${k}=…\\).*key field`));
+		}
+		// It names the choice as the form shows it (StationApiFeedForm's How the key is sent).
+		expect(issue({ ...base, url: 'https://api.example.com/rain?token=abc' })).toContain('choose “As a parameter in the URL” named token as how the key is sent');
+		expect(stationUrlProblem('https://api.example.com/rain?station_name=x')).toBeNull();
+		// Names that only contain a key word are refused too (security review): appid, x-api-key, api_token.
+		for (const k of ['appid', 'x-api-key', 'api_token', 'client_secret', 'sessionid', 'pwd']) {
+			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc` }), k).toMatch(/the URL carries a key/);
+		}
+		for (const k of ['code', 'jwt', 'bearer', 'passcode', 'app_id', 'hmac', 'otp', 'pin', 'license', 'access']) {
+			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc` }), k).toMatch(/the URL carries a key/);
+		}
+		for (const k of ['units', 'format', 'stationId', 'start_date', 'cycle_type', 'mac', 'imei', 'limit', 'interval', 'station_code', 'tz', 'type']) {
+			expect(stationUrlProblem(`https://api.example.com/rain?${k}=x`), k).toBeNull();
+		}
+	});
+	it('finds an unknown placeholder as /\{[^}]*\}/g did, in one pass on a long run of { (CodeQL js/polynomial-redos)', () => {
+		// Each { runs to the next }: the first one here holds the second's {.
+		expect(stationUrlProblem('https://api.example.com/{a{station}/rain')).toBe('{a{station} is not a placeholder: use {station}, {start} and {end}');
+		expect(stationUrlProblem('https://api.example.com/{station}/{x}?from={start}')).toMatch(/^\{x\} is not a placeholder/);
+		expect(stationUrlProblem('https://api.example.com/{station}}/{end')).toBeNull();
+		// The regex scanned each { to the end: 100 000 of them took ~10 s, past vitest's 5 s timeout.
+		const run = '{'.repeat(100_000);
+		expect(stationUrlProblem(`https://api.example.com/${run}`)).toBeNull();
+		expect(stationUrlProblem(`https://api.example.com/${run}}`)).toMatch(/^\{+\} is not a placeholder/);
+	});
+
+	it('refuses a placeholder in the site, so an edit of the station can’t move the key to another host', () => {
+		for (const url of ['https://rain.{station}/v1?from={start}', 'https://{station}.example.com/rain', 'https://api.example.com{station}/x', 'https://x-{start}.example.com/']) {
+			expect(issue({ ...base, url }), url).toMatch(/site \(its host\) must be written out/);
+		}
+		expect(issue({ ...base, url: 'https://api.example.com/{station}/rain?from={start}&to={end}' })).toBeUndefined();
+	});
+
+	it('refuses a host the app’s own feeds and ingest read', () => {
+		for (const host of ['data.chc.ucsb.edu', 'chc.ucsb.edu', 'www.dws.gov.za', 'power.larc.nasa.gov', 'urs.earthdata.nasa.gov', 'storage.googleapis.com', 'foo.storage.googleapis.com', 's3.af-south-1.amazonaws.com', 'nex-gddp-cmip6.s3.us-west-2.amazonaws.com', 'DATA.CHC.UCSB.EDU.']) {
+			expect(issue({ ...base, url: `https://${host}/rain` }), host).toMatch(/a data source the app itself reads/);
+		}
+	});
+
+	it('starts no earlier than 2000-01-01', () => {
+		expect(issue({ ...base, startDate: '1999-12-31' })).toMatch(/at the earliest/);
+		expect(StationApiConfig.safeParse({ ...base, startDate: '2000-01-01' }).success).toBe(true);
+	});
+
+	it('takes only the known placeholders, and needs the station for {station}', () => {
+		expect(issue({ ...base, url: 'https://api.example.com/{site}/rain' })).toBe('{site} is not a placeholder: use {station}, {start} and {end}');
+		expect(StationApiConfig.safeParse({ ...base, station: undefined }).error?.issues[0]).toMatchObject({ path: ['station'] });
+		expect(StationApiConfig.safeParse({ ...base, url: 'https://api.example.com/rain?from={start}&to={end}', station: undefined }).success).toBe(true);
+		expect(issue({ ...base, url: 'https://api.example.com/rain#x' })).toMatch(/fragment/);
+	});
+
+	it('refuses plain http, another port, a user in the URL and private or local hosts', () => {
+		expect(issue({ ...base, url: 'http://api.example.com/rain' })).toBe('the URL must start with https://');
+		expect(issue({ ...base, url: 'https://api.example.com:8443/rain' })).toMatch(/standard HTTPS port/);
+		expect(issue({ ...base, url: 'https://u:p@api.example.com/rain' })).toMatch(/user name and password in the key/);
+		for (const host of ['127.0.0.1', '10.1.2.3', '169.254.169.254', '192.168.1.1', '[::1]', '[fd00:ec2::254]', 'localhost', 'metadata.internal', 'printer.local', 'intranet']) {
+			expect(issue({ ...base, url: `https://${host}/rain` }), host).toMatch(/private or reserved address|public internet name/);
+		}
+		expect(issue({ ...base, url: 'https://8.8.8.8/rain' })).toBeUndefined();
+	});
+
+	it('header rules: no key-carrying or reserved extra header, no clash with the auth header', () => {
+		expect(StationApiConfig.safeParse({ ...base, headers: { Accept: 'application/json' } }).success).toBe(true);
+		expect(issue({ ...base, headers: { Authorization: 'Bearer x' } })).toMatch(/carries a key/);
+		expect(issue({ ...base, headers: { 'X-Api-Key': 'x' } })).toMatch(/carries a key: choose “In a header” as how the key is sent/);
+		for (const h of ['X-Auth-Token', 'Ocp-Apim-Subscription-Key', 'X-RapidAPI-Key', 'X-Session']) expect(issue({ ...base, headers: { [h]: 'x' } }), h).toMatch(/carries a key/);
+		expect(issue({ ...base, headers: { Host: 'evil.example' } })).toMatch(/set by the app/);
+		expect(issue({ ...base, headers: { Cookie: 'a=b' } })).toMatch(/set by the app/);
+		expect(issue({ ...base, headers: { 'X-Ok': 'a\r\nX-Evil: 1' } })).toMatch(/can’t carry/);
+		expect(issue({ ...base, auth: { kind: 'header', name: 'X-Station' }, headers: { 'x-station': 'v' } })).toBe('that header is also an extra header');
+		expect(issue({ ...base, auth: { kind: 'query', name: 'from' } })).toMatch(/already has a from parameter/);
+	});
+
+	it('takes a key only for a station API feed whose auth sends one', () => {
+		expect(credentialProblem('chirps', { cells: [{ ...cells[0]!, weight: 1 }] })).toBe('only a weather station API feed keeps a key');
+		const none = StationApiConfig.parse({ ...base, auth: { kind: 'none' } }) as StationApiConfigT;
+		expect(credentialProblem('station_api', none)).toMatch(/sends no key/);
+		expect(credentialProblem('station_api', StationApiConfig.parse(base))).toBeNull();
+		const refused = (body: unknown) => FeedInput.safeParse(body).error?.issues[0];
+		expect(refused({ source: 'chirps', config: { cells }, credential: { secret: 'k-12345678' } })).toMatchObject({ path: ['credential'], message: 'only a weather station API feed keeps a key' });
+		expect(refused({ source: 'station_api', config: { ...base, auth: { kind: 'none' } }, credential: { secret: 'k-12345678' } })).toMatchObject({ path: ['credential'] });
+		// No key yet with an auth that sends one: allowed (the card says no key is saved).
+		expect(FeedInput.safeParse({ source: 'station_api', config: base }).success).toBe(true);
 	});
 });
 

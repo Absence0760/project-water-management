@@ -7280,6 +7280,99 @@ editors run one now and read the map's proposals, viewers read.
   choose rnl). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
+- **Source: Weather station API** (owners; issue #784,
+  `feeds/StationApiFeedForm.svelte`, its own lazy chunk loaded when the
+  source is picked, helpers in `feeds/stationApi.ts`): a rainfall station
+  read from whatever web API its provider offers, into a rainfall station
+  series (Rainfall — catchment) named after it, so the card has no **Area**,
+  **Into series** or optional name. The fields, for a hydrologist rather
+  than a developer, in the order their provider's documentation reads,
+  under three small headings (*The API and the station*, *The key*, *How to
+  read the answer*) before the sample: **Start from a known API** (presets that only prefill
+  and say to check them against the provider's documentation: *Generic JSON
+  (daily totals)*, *Generic CSV (5-minute readings, Campbell-style
+  TIMESTAMP / Rain_mm_Tot)*, *Weather Underground PWS (daily)*; Ecowitt's
+  history API is left out, as it takes two keys and a feed sends one),
+  **The API's URL** (a text box that wraps, so a long URL reads whole; a
+  line break is dropped and Enter submits; its hint explains `{station}`,
+  `{start}` and `{end}` with an example, and a second line says when the
+  URL names no days), **Station ID**, **Station name** (the series name),
+  **How the key is sent**
+  (no key, Bearer token, in a header with its name and what goes before the
+  key, as a URL parameter by name, or user name and password) and the
+  **Key** (`type="password"`, `autocomplete="off"`). Above the key's
+  heading, one line says the owner is responsible for having the provider's permission
+  to fetch the station's data this way (their API terms; the request is
+  made with their key under their agreement, data-sources.md §
+  station-api; `data-testid="station-terms"`). A fold, **Requests:**,
+  holds how dates go in the URL (year-month-day by default, ISO, Unix
+  seconds or milliseconds, or a pattern), days per request (default 31),
+  days read again (default 7), the start date (default 90 days back) and up
+  to 8 **Extra headers**. **How to read the answer**: JSON (the path to the
+  records, *Records keyed by time*) or CSV (delimiter, lines to skip, *The
+  first line names the columns*), a decimal comma, the time and rain field
+  or column, the time format (a day, day and time, ISO, Unix seconds or
+  milliseconds, or a pattern) and time zone (default Africa/Johannesburg,
+  a typed IANA zone with a list of the region's), and **Readings** (one a day,
+  or within the day: when a rain day starts, default 08:00, which day it is
+  dated by, whether a reading's time marks the end or start of its interval,
+  and whether each reading is the interval's rain or a running total). A
+  second fold, **Values:**, holds the scale (25.4 for inches, the mm per tip
+  for tip counts), the missing markers, and whether a day with no readings
+  is a gap or 0 mm (a logger that reports only rain). Each fold's line says
+  its values (`requestLine`, `moreLine`). The form explains a bad URL (http,
+  a placeholder in the host, a port other than 443, a host that isn't a
+  public name, a key in its query, an unknown placeholder, a #fragment), a
+  missing key, station ID, header or field, and a start before 1 Jan 2000,
+  before anything is sent, in the form's order (URL, station ID, name,
+  key, …) and the server's words. The problem shows under its own field
+  (`role="alert"`, and the field's `aria-describedby`), which is marked
+  `aria-invalid` and focused, its fold opened first; with a pattern
+  chosen for the dates or times, the pattern's box takes the problem. The
+  server checks it all again: a 400's first issue lands on its field the
+  same way (`stationServerProblem` maps the body path, e.g.
+  `config.url` → the URL, a private address refused there), and so does a
+  409 for a series another feed writes (on the station name); one that
+  names no field (at most 10 station feeds a project, the source off) shows
+  in the card's error line above Attach feed. The server's messages name
+  the form's choices ("choose “In a header”", "“As a parameter in the
+  URL”"). Where the server takes none (the
+  list's `stationApiFeeds: false`, `STATION_API_FEEDS` off) the source is
+  listed disabled, "(off on this server)", with the note "Weather station
+  API feeds are off on this server: the operator switches them on."
+  (`data-testid="station-api-off"`); a feed already attached shows either
+  way. When POST or PATCH answers with a `warning` (a station feed that
+  sends a key with none saved), the panel's message adds it as "Note: …"
+  (`warningText`). The Source select names the off note as its
+  description. **Try it on a sample**:
+  "Paste what your provider’s API returns; nothing leaves your browser.", a
+  text box and **Try it**, which reads the answer in the browser with the
+  feed's own reader (`previewStationAnswer`, the engine's
+  `station-format`), so the preview and the fetch can't read it two ways:
+  "Read 3 records: 3 days, 2 with rain data and 1 gap." and a table of the
+  last 14 days, newest first, a gap written "gap", or the reader's message
+  ("The answer is a web page (HTML), not JSON: check the URL and the key.");
+  only the summary or the message is the live region, not the table.
+  The key is sent once with the attach (`credential`, never an empty one)
+  and never read back. Its card names the host and station, never the URL's
+  path or query ("station.example, station WS-01"), and says "Key saved ·
+  ends …0001" (the last four characters, for editors and owners and a key of
+  16 or more; plain "Key saved" otherwise) or "No key saved: the feed can’t sign in to its API until an
+  owner adds one." (`credentialLine`, `data-testid="feed-key"`). Owners get
+  **Replace key** (**Add a key** when none is saved; `aria-expanded`), a
+  small write-only form under the card's actions, named for what it does
+  ("Replace the key: …" or "Add a key: …") (New key, and the user name
+  for Basic; an empty key is refused, the field starts empty and is cleared
+  whatever the answer), and **Remove key** (after a confirm); editors and
+  viewers see the line and no key controls. History reads "Set up the
+  weather station API feed into the Rainfall — catchment “Hilltop” series,
+  key saved", "Replaced the key of …" and "Removed the key of …" from the
+  audit subject's `credential` (`history/timeline.ts`). On a phone
+  the form stacks with no sideways scroll (the form's own `.field` and
+  `select` rules: the panel's don't reach into the child component). Tested by
+  `stationApi.test.ts`, `feeds.test.ts` and `e2e/tests/station-api-feed.spec.ts`
+  (the synthetic station API on `station.example`; a phone test checks the
+  fit, axe and the off state).
 - **Attaching to a series that has data.** A feed keeps the values already
   in its series, uploaded or imported ones included, and fills only the days
   without one ([architecture.md § Data feeds](./architecture.md#data-feeds),

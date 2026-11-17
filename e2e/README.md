@@ -359,7 +359,10 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   queued jobs, so a test asserting "Queued" (a yield, a sweep, an outlook, a
   due re-run) saw "Running…". Pass `schedule: false` unless the test needs
   the feed schedule (only `data-feeds.spec.ts`, which runs its tests one at
-  a time because that schedule looks at every project).
+  a time). That schedule is scoped like the claim, to the named projects'
+  due feeds: a new feed is due at once, and an unscoped schedule queued
+  other specs' feeds (and, with "Run now" pressed at that moment, hit the
+  claim deadlock 322 fixed; issue #784).
 - `timezoneId` is pinned to `UTC`, so date output is deterministic.
 - **Fixtures are synthetic.** The repo is public, so never commit client names,
   values or workbook-derived data.

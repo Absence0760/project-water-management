@@ -79,6 +79,37 @@ export class FeedServerError extends FeedUnavailableError {
 	}
 }
 
+/**
+ * A station API feed's source answered HTTP 401 or 403 (issue #784): the key
+ * is wrong, expired or revoked, or the account may not read that station. A
+ * refusal like FeedRefusedError, so the stored message starts with
+ * FEED_REFUSED_PREFIX and the feed backs off for hours: asking again every 15
+ * minutes with a bad key can lock the owner's account at their provider. Its
+ * own text, since the fix is the key, not our address. Never pauses the host
+ * for other feeds: another project's key there may be fine.
+ */
+export class FeedKeyRefusedError extends FeedUnavailableError {
+	readonly status: 401 | 403;
+	constructor(status: 401 | 403) {
+		super(`HTTP ${status}`);
+		this.status = status;
+	}
+}
+
+/**
+ * A station API feed's key can't be used (issue #784): none is saved though its
+ * auth needs one, the saved one won't open (feeds/credential.ts: a rotated
+ * fetcher key, tampering), or Basic's user name is missing. Nothing was asked
+ * of the station's API. A FeedFormatError (no retry fixes it: the scheduler's
+ * backoff, 15 minutes doubling to a day, applies, and it costs no request),
+ * with its own stored text (FEED_KEY_PREFIX) telling the owner to replace the
+ * key. The message never carries the key or any part of it.
+ */
+export class FeedKeyError extends FeedFormatError {}
+
+/** How a key problem's stored message starts (feedErrorMessage); the fetcher logs it as `credential` (lambda-fetcher.ts). */
+export const FEED_KEY_PREFIX = 'the feed’s key can’t be used';
+
 /** How a server error's stored message starts (feedErrorMessage). */
 export const FEED_SERVER_ERROR_PREFIX = 'the source had a server error';
 
@@ -95,8 +126,10 @@ export const FEED_ERROR_MAX = 500;
 /** The message to store for anything a fetch threw. Unexpected errors get a generic text. */
 export function feedErrorMessage(err: unknown): string {
 	const clip = (s: string) => (s.length > FEED_ERROR_MAX ? `${s.slice(0, FEED_ERROR_MAX - 1)}…` : s);
+	if (err instanceof FeedKeyError) return clip(`${FEED_KEY_PREFIX}: ${err.message}`);
 	if (err instanceof FeedFormatError) return clip(`the source’s data could not be read: ${err.message}`);
 	if (err instanceof FeedServerError) return clip(`${FEED_SERVER_ERROR_PREFIX} (${err.message}), so the feed tries again later`);
+	if (err instanceof FeedKeyRefusedError) return `${FEED_REFUSED_PREFIX} (HTTP ${err.status}): the station’s API refused the saved key, so check it or replace it (Replace key); the feed waits hours before asking again`;
 	if (err instanceof FeedRefusedError) return `${FEED_REFUSED_PREFIX} (HTTP 403): it may have blocked this server’s address, so the feed waits hours before asking again`;
 	if (err instanceof FeedUnavailableError) return clip(`the source is unreachable: ${err.message}`);
 	return 'the fetch failed with an internal error';

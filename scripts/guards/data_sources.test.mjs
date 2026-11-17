@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { check, configSources, feedHosts, findProblems, migrationSources, registerEntries } from './data_sources.mjs';
+import { check, configSources, feedHosts, findProblems, migrationSources, registerEntries, USER_CONFIGURED } from './data_sources.mjs';
 
 const reader = (files) => (p) => files[p] ?? null;
 
@@ -152,6 +152,33 @@ describe('findProblems', () => {
 		assert.match(findProblems({ ...ok, register: '# nothing' })[0], /no summary table/);
 		assert.match(findProblems({ ...ok, config: null }).join('\n'), /FEED_SOURCES/);
 		assert.match(findProblems({ ...ok, migration: null }).join('\n'), /CHECK on data_feed\.source/);
+	});
+
+	// Issue #784: a station API feed fetches whatever https URL its owner gives, so its row has no fixed host.
+	describe('a source with user-configured hosts', () => {
+		const withRow = (hostsCell) => REGISTER.replace("| dpet | dPET |", `| station | Station APIs | built | ${hostsCell} | \`station_api\` | x |\n| dpet | dPET |`);
+		const sources = { config: [...ok.config, 'station_api'], migration: { file: '321.sql', values: [...ok.config, 'station_api'] } };
+
+		it('passes when its Hosts cell is marked user-configured (positive control)', () => {
+			assert.equal(USER_CONFIGURED, 'user-configured');
+			assert.deepEqual(findProblems({ ...ok, ...sources, register: withRow('user-configured (each feed\'s https URL)') }), []);
+			assert.deepEqual(findProblems({ ...ok, ...sources, register: withRow('User-configured') }), []);
+		});
+
+		it('fails a source row that names no host and is not marked', () => {
+			for (const cell of ['–', 'any', 'see below', 'configured by the user']) {
+				const p = findProblems({ ...ok, ...sources, register: withRow(cell) });
+				assert.equal(p.length, 1, cell);
+				assert.match(p[0], /row for 'station_api' names no host/);
+			}
+		});
+
+		it('the marker never adds a host, and a row with hosts needs no marker', () => {
+			const e = registerEntries(withRow('user-configured'));
+			assert.ok(!e.hosts.has('user-configured'));
+			assert.deepEqual(e.sourceRows.get('station_api'), { hosts: 0, userConfigured: true });
+			assert.deepEqual(e.sourceRows.get('chirps'), { hosts: 1, userConfigured: false });
+		});
 	});
 
 	it('carries the problems reading FEED_HOSTS', () => {

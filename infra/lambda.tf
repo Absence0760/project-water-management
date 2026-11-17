@@ -214,6 +214,12 @@ resource "aws_lambda_function" "backend" {
       # value as the worker's (jobs.tf), which runs them, and the
       # assistant's (assistant.tf), which builds the same reports.
       FUTURE_YIELD = var.future_yield_enabled ? "on" : "off"
+      # Station API feeds (issue #784, feeds.tf): on lets owners attach one,
+      # and the API seals each saved key to the fetcher's public key. Not a
+      # secret: the API can seal, never open (the private half is the
+      # fetcher's runtime secret alone, secrets.tf). Empty while off.
+      STATION_API_FEEDS          = var.station_api_feeds ? "on" : "off"
+      FEED_CREDENTIAL_PUBLIC_KEY = var.feed_credential_public_key
 
       # Server-side reports (reports.tf): the API signs PDF downloads as
       # CloudFront signed URLs on the site's /reports/* path. The private key

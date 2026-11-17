@@ -262,6 +262,7 @@ pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
                              # (no DB, no network; scripts/reproduce-pack/, evidence-pack.md § Reproduction)
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
+pnpm gen:feed-credential-key # print a new X25519 pair for station API feeds; the operator runs it, never an agent (public half → prod.tfvars.sops, private → sops; deployment.md § Station API feeds)
 
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, a draft skip only with ready_for_review, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps, no pnpm `version:` beside packageManager) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack

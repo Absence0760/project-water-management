@@ -266,8 +266,11 @@ data "aws_iam_policy_document" "secretsmanager_endpoint" {
   }
 
   # One statement per runtime secret: its own Lambda's role, its own ARN.
+  # Not the fetcher's (station API feeds, secrets.tf): the fetcher is outside
+  # this VPC and reads it over the public endpoint, so this endpoint has no
+  # reason to admit its role.
   dynamic "statement" {
-    for_each = aws_secretsmanager_secret.runtime
+    for_each = { for k, v in aws_secretsmanager_secret.runtime : k => v if k != "fetcher" }
     content {
       sid       = "ReadRuntimeSecret${title(statement.key)}"
       actions   = ["secretsmanager:GetSecretValue"]

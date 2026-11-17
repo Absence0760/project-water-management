@@ -93,6 +93,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'authority_delegate.confirmed_by': { excluded: 'someone else the person confirmed as acting for the authority; authority.confirmed is in auditEvents' },
 	'data_feed.acting_user_id': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
 	'data_feed.created_by': { excluded: 'the project’s feed configuration; feed.configured is in auditEvents' },
+	// A station API feed's key (321): who last saved it only; feed.configured (credential: saved / replaced / cleared) is in auditEvents.
+	'data_feed_credential.updated_by': { excluded: 'the project’s feed key, sealed to the fetcher; who saved it only, and feed.configured is in auditEvents; never key material' },
 	// An evidence pack (112_evidence_pack): who drafted and issued it is in the audit events (pack.drafted, pack.issued), exported with them.
 	'evidence_pack.created_by': { excluded: 'the project’s evidence pack; its maker only, and the drafting is an exported audit event' },
 	'evidence_pack.issued_by': { excluded: 'the project’s evidence pack; its issuer only, and the issue is an exported audit event' },

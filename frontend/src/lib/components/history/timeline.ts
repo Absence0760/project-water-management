@@ -103,8 +103,18 @@ function ewrRuleWords(r: Record<string, unknown>): string {
 	}
 }
 
-const FEEDS: Record<string, string> = { chirps: 'CHIRPS', chirps_gefs: 'CHIRPS-GEFS forecast', dws: 'DWS', ecmwf_ens: 'ECMWF ENS forecast', agera5_et0: 'AgERA5 reference ET' };
+const FEEDS: Record<string, string> = { chirps: 'CHIRPS', chirps_gefs: 'CHIRPS-GEFS forecast', dws: 'DWS', ecmwf_ens: 'ECMWF ENS forecast', agera5_et0: 'AgERA5 reference ET', station_api: 'weather station API' };
 const feedName = (s: unknown) => FEEDS[str(s)] ?? str(s);
+/**
+ * A feed.configured subject's `credential` (a station API feed's key, issue #784) in words: 'saved', 'replaced' or
+ * 'cleared' (true reads as saved), or null when the change didn't touch the key.
+ */
+function credentialWords(c: unknown): 'saved' | 'replaced' | 'cleared' | null {
+	if (c === true || c === 'saved' || c === 'set') return 'saved';
+	if (c === 'replaced') return 'replaced';
+	if (c === false || c === 'cleared' || c === 'removed') return 'cleared';
+	return null;
+}
 
 /** "the Rainfall — catchment series", "the Flow — observed gauge “upper” series". */
 function seriesName(s: Record<string, unknown>): string {
@@ -337,8 +347,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })} from ${from}`;
 				return `Gave ${feed} the cells of ${from}`;
 			}
-			if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })}`;
+			// A station API feed's key (issue #784): the history says it was saved, replaced or cleared, never the key.
+			const key = credentialWords(s.credential);
+			if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })}${key ? `, key ${key}` : ''}`;
 			if (s.action === 'removed') return `Removed ${feed}`;
+			if (key) return `${key === 'cleared' ? 'Removed the key of' : key === 'replaced' ? 'Replaced the key of' : 'Saved a key for'} ${feed}`;
 			// A confirmation to replace its series (issue #40c) is its own sentence: it is why the series will change.
 			if (typeof s.replaceSeries === 'string') return `Confirmed that ${feed} replaces ${seriesName({ kind: s.targetKind, name: s.targetName })} at its next fetch`;
 			return `Changed ${feed}${s.enabled === false ? ' (switched off)' : ''}`;

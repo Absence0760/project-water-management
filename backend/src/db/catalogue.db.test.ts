@@ -344,6 +344,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'authority_delegate.user_id': 'cascade',
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
+	// Who last saved a station API feed's key (321): the key is the project's and stays.
+	'data_feed_credential.updated_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
 	// A count for the elevation-model cap; goes with the account (184_dem_attempt).
 	'dem_attempt.user_id': 'cascade',
@@ -877,6 +879,7 @@ describe('schema catalogue', () => {
 			{ proname: 'app_claim_feed', pinned: true, secdef: true },
 			{ proname: 'app_due_feeds', pinned: true, secdef: true },
 			{ proname: 'app_dws_feed_stations', pinned: true, secdef: true },
+			{ proname: 'app_feed_credential_state', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_now', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_out', pinned: true, secdef: false },

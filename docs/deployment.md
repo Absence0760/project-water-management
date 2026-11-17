@@ -267,6 +267,7 @@ Keys this app needs:
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
 | `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links and the "Was this useful?" links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent, and the feedback links of the last 30 days |
 | `app_encryption_key` | `APP_ENCRYPTION_KEY` in the API's runtime secret: seals two-step sign-in's TOTP secrets at rest (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it voids every authenticator ([§ Runbooks](#runbooks) 15) |
+| `feed_credential_private_key` | Optional, only with `station_api_feeds = true`: `FEED_CREDENTIAL_PRIVATE_KEY` in the fetcher's runtime secret, which opens the keys owners save for station API feeds (43 base64url characters from `pnpm gen:feed-credential-key`, whose public half goes in `prod.tfvars.sops` as `feed_credential_public_key`). Rotating it voids every saved station key ([§ Station API feeds](#station-api-feeds)) |
 | `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars.sops` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
@@ -1405,7 +1406,9 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 - **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
   `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
   access, which is what keeps the feeds from needing a NAT), 512 MB, 900 s,
-  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`,
+  reserved concurrency `fetcher_reserved_concurrency` (2; plus 2 for station
+  API feeds' own trigger while `station_api_feeds` is on, [§ Station API
+  feeds](#station-api-feeds)). `FEED_SOURCE=live`,
   and `FEEDS_CONTACT` from `feeds_contact` (required; the contact in its user
   agent, which CHC asked for). It reads CHC one file at a time, about one
   request a second, and answers a long backfill window with the days it
@@ -3167,6 +3170,113 @@ fires if the copy falls behind, and outlooks keep reading the last copy,
 stepping back at most two months. Turning it off stops the copy; the files
 stay in the bucket.
 
+## Station API feeds
+
+A rainfall station's readings fetched from its provider's own web API, set
+up by a project's owner (issue #784; [security.md § Station API
+feeds](./security.md#station-api-feeds), [data-sources.md §
+station-api](./data-sources.md#station-api)). Off in production
+(`station_api_feeds = false`, the default): the attach route refuses the
+source and nothing below exists.
+
+What `station_api_feeds = true` changes (`infra/feeds.tf`, `secrets.tf`,
+`lambda.tf`, `jobs.tf`):
+
+- `STATION_API_FEEDS=on` on the API, the worker and the fetcher, and
+  `FEED_CREDENTIAL_PUBLIC_KEY` (`feed_credential_public_key`) on the API,
+  which seals each saved key with it, and on the fetcher.
+- The fetcher gets its own runtime secret, `water-management/runtime/fetcher`,
+  holding `FEED_CREDENTIAL_PRIVATE_KEY` (sops `feed_credential_private_key`),
+  with `secretsmanager:GetSecretValue` on that secret alone, and reads it at
+  cold start. Neither the API nor the worker can read it.
+- Per-feed fetching stays on whatever `chirps_source` and `dws_source` say
+  (`local.per_feed_fetching`): a station's own API can't be read from our
+  copy, so the `fetch-requests` and `ingest-results` queues, their triggers
+  and alarms, and the worker's `FEED_FETCHER=sqs` stay after [§ The
+  cutover](#the-cutover) (or come back, if it was already applied).
+- Station fetches get their own FIFO queue, `station-fetch-requests.fifo`
+  (one message group per station host), with its DLQ, its DLQ-arrivals
+  alarm (essential tier) and its oldest-message-age alarm (full tier), and
+  their own SQS trigger into the fetcher at `maximum_concurrency` 2. The
+  worker sends them there (`STATION_FETCH_REQUESTS_QUEUE_URL`, with
+  `sqs:SendMessage` on that queue alone, and the SQS endpoint's
+  `WorkerSendsStationFetchRequests`); answers come back through
+  `ingest-results`. So an owner's slow station hosts can't hold the trigger
+  CHIRPS and DWS fetches use.
+- **The fetcher's reserved concurrency rises by 2**, to
+  `fetcher_reserved_concurrency` + 2 (4 at the default). Station fetches can
+  hold at most their trigger's 2, so CHC's and DWS's trigger and the
+  scheduled modes (daily ingest, GEFS, DWS weekly, dams, ET) keep the
+  `fetcher_reserved_concurrency` they had. The account's concurrency quota
+  needs that 2 more of headroom (the sum of every reservation + 10:
+  `infra/terraform.tfvars.example`); `infra/scripts/preapply-check.sh`
+  counts them when its `--var-file` sets `station_api_feeds = true`.
+
+### Turning it on
+
+The operator does every step; nothing here is for an agent to run.
+
+1. **Release the backend and the web app** with issue #784:
+   `gh release create backend@X.Y.Z --target main --generate-notes`
+   (migration 321 and the feed) and
+   `gh release create web@X.Y.Z --target main --generate-notes` (the Attach a
+   feed form), each approved in the `production` environment. The backend's
+   production check takes an unset `STATION_API_FEEDS` as off, so it starts
+   on today's Terraform.
+2. **Generate the key pair on your own machine:** `pnpm gen:feed-credential-key`.
+   It prints both halves and writes nothing. Never paste the private half
+   into a chat, an issue or a CI log, and clear the terminal afterwards.
+3. **Put the private half in sops:**
+   `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`,
+   adding `feed_credential_private_key: "<the private half>"`
+   (`infra/prod.sops.yaml.example`). `tf.sh` passes it as an ephemeral
+   variable when present; it never reaches state.
+4. **Put the public half and the switch in `prod.tfvars.sops`:**
+   `station_api_feeds = true` and `feed_credential_public_key = "<the public half>"`.
+   Plan refuses the switch without both keys, a malformed key, or the
+   committed dev key.
+5. **Check the headroom, plan, read it, then apply** with your own go-ahead.
+   With `station_api_feeds = true` in `prod.tfvars.sops`,
+   `cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops`
+   counts the fetcher's 2 more in its `lambda-quota` check. Then
+   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars.sops -out=<plan>`
+   and `AWS_PROFILE=water-management ./scripts/tf.sh apply <plan>`. Expect: a new
+   `aws_secretsmanager_secret.runtime["fetcher"]` and its version, the
+   `read-runtime-secret` policy on the fetcher's role, the
+   `station-fetch-requests.fifo` queue and its DLQ (and redrive policy), the
+   fetcher's station trigger (`maximum_concurrency` 2), the
+   `station-fetch-queue` policies on the fetcher's and worker's roles, the
+   SQS endpoint's `WorkerSendsStationFetchRequests` statement, the two
+   station queue alarms, the fetcher's reserved concurrency going from
+   `fetcher_reserved_concurrency` to that + 2, new environment on
+   the backend, worker and fetcher functions (the worker's includes
+   `STATION_FETCH_REQUESTS_QUEUE_URL`), every runtime secret version
+   rewritten (the sops edit moved `runtime_secret_version`, so every Lambda
+   cold-starts), and, if the cutover was already applied, the per-feed
+   queues, triggers and alarms back.
+6. **Check:** the fetcher's log group shows no `refusing to start the
+   fetcher Lambda` after the apply; on a test project, **Data → Data feeds →
+   Attach a feed → Weather station (API)** offers the source; attach one,
+   press **Run now** and watch its health.
+
+### Rotating or turning it off
+
+- **Rotating the pair** (a leak, or routine): generate a new pair, replace
+  both halves (sops and `prod.tfvars.sops`) and apply. Every saved station key is
+  then unreadable: each feed reports that its key can't be opened, and its
+  owner enters it again (**Replace key**). Rotate only when needed.
+- **Turning it off:** `station_api_feeds = false` and apply. The API refuses
+  new station API feeds (existing ones show, and their fetches fail with a
+  clear error), the fetcher's secret is scheduled for deletion, the station
+  queue, its DLQ, trigger, grants and alarms go (check it is empty first:
+  `ApproximateNumberOfMessages` 0), the fetcher's reserved concurrency drops
+  back by 2, and the per-feed queues go again if the cutover is in. Remove the sops key too.
+  Secrets Manager keeps a deleted secret 30 days: turning it back on within
+  that window fails to create `water-management/runtime/fetcher`; restore it
+  (`aws secretsmanager restore-secret --secret-id water-management/runtime/fetcher --profile water-management`)
+  and import it (`infra/scripts/tf.sh import 'aws_secretsmanager_secret.runtime["fetcher"]' <its ARN>`)
+  before the apply.
+
 ## The cutover
 
 Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto
@@ -3187,9 +3297,11 @@ still refuses to send a source the copy or store serves (a CHIRPS or GEFS
 fetch never reaches SQS with `chirps_source = "mirror"`, nor a DWS fetch
 with `dws_source = "store"`; `backend/src/jobs/handlers/feed-fetch.ts`).
 
-**What the second flag removes.** With both on the new values,
-`local.per_feed_fetching` (`infra/feeds.tf`) is false, and the same apply
-plans to destroy:
+**What the second flag removes.** With both on the new values, and
+`station_api_feeds` off ([§ Station API feeds](#station-api-feeds): a
+station's own API always fetches per feed, so with it on nothing below is
+removed), `local.per_feed_fetching` (`infra/feeds.tf`) is false, and the
+same apply plans to destroy:
 
 - the `fetch-requests` and `ingest-results` queues, their DLQs and redrive
   policies;

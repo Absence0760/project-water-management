@@ -36,6 +36,9 @@ locals {
   alerts_token_secret    = var.alerts_token_secret
   cloudfront_private_key = var.cloudfront_private_key
   app_encryption_key     = var.app_encryption_key
+  # The fetcher's key for station API feeds (issue #784): only while
+  # station_api_feeds is on, which the variable's validation enforces.
+  feed_credential_private_key = var.feed_credential_private_key
 }
 
 # Shape checks live as validations on the variables (variables.tf), so a
@@ -81,8 +84,11 @@ locals {
 # Encrypted with the AWS-managed aws/secretsmanager key, like the RDS
 # master secret, so a role needs only secretsmanager:GetSecretValue on its ARN.
 # The API and worker reach Secrets Manager through the VPC endpoint in
-# network.tf, like migrate; the fetcher and renderer (outside the VPC) hold
-# no secret at all.
+# network.tf, like migrate. The renderer holds no secret. The fetcher holds
+# one only while station_api_feeds is on: the X25519 key that opens station
+# API feeds' credentials (issue #784, docs/security.md § Station API feeds),
+# read over the public Secrets Manager endpoint (it is outside the private
+# VPC; with fixed_egress_enabled, through the egress VPC's NAT).
 # ----------------------------------------------------------------------------
 
 locals {
@@ -120,14 +126,23 @@ locals {
       DATABASE_URL             = local.assistant_database_url
       CLOUDFRONT_SHARED_SECRET = random_password.cloudfront_shared_secret.result
     }
+    # The fetcher (feeds.tf): the key that opens station API feeds'
+    # credentials, which the API seals to its public half and the worker
+    # forwards sealed. Neither of them holds it. Written only while
+    # station_api_feeds is on (the secret follows runtime_secret_roles).
+    fetcher = {
+      FEED_CREDENTIAL_PRIVATE_KEY = local.feed_credential_private_key
+    }
   }
 
-  # The role that may read each secret. The assistant's only while it exists.
+  # The role that may read each secret. The assistant's only while it exists,
+  # the fetcher's only while station API feeds are on.
   runtime_secret_roles = merge({
     api     = aws_iam_role.lambda
     worker  = aws_iam_role.worker_lambda
     migrate = aws_iam_role.migrate_lambda
-  }, local.assistant_enabled ? { assistant = aws_iam_role.assistant_lambda[0] } : {})
+    }, local.assistant_enabled ? { assistant = aws_iam_role.assistant_lambda[0] } : {},
+  var.station_api_feeds ? { fetcher = aws_iam_role.fetcher_lambda } : {})
 }
 
 resource "aws_secretsmanager_secret" "runtime" {

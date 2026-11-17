@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #784 UI pass: the station API form shows each problem under its own field, maps the server's 400 details and 409 onto the field (stationServerProblem), wraps the URL in a text box and fits a phone; the form's lazy chunk 14.9 -> 16.5 KB gzip. Measured total 2504 KB against 2502 KB."
+}

@@ -202,6 +202,13 @@ beforeAll(async () => {
 	await call(subject, 'PUT', `/projects/${projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: farm.id, threshold: 0.25, enabled: false }] });
 	await call(subject, 'PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'daily_digest' }] });
 	await call(subject, 'POST', `/projects/${projectId}/feeds`, { source: 'dws', config: { station: 'X0H000' } });
+	// A station API feed's key the subject saved (321: data_feed_credential.updated_by).
+	await call(subject, 'POST', `/projects/${projectId}/feeds`, {
+		source: 'station_api',
+		config: { url: 'https://api.example.com/rain?from={start}&to={end}', auth: { kind: 'bearer' }, format: { format: 'csv', time: 'date', value: 'rain', timeFormat: 'YYYY-MM-DD', resolution: 'daily' } },
+		enabled: false,
+		credential: { secret: 'personal-data-station-key' }
+	});
 	await call(subject, 'POST', `/projects/${projectId}/report-schedules`, { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [subject.id, owner.id] });
 	// A PDF the subject asked for, and one the owner mailed to them.
 	await call(subject, 'POST', `/projects/${projectId}/reports`, { email: true });
