@@ -3302,7 +3302,7 @@ run on the job queue, with the rendering done outside the VPC (infra/reports.tf)
   API).
 - **Renderer Lambda** (`backend/src/lambda-renderer.ts`, handler
   `lambda-renderer.handler`): a **container image** built from
-  `backend/renderer.Dockerfile` (Playwright's image `v1.64.1-noble`, the
+  `backend/renderer.Dockerfile` (Playwright's image `v1.65.0-noble`, the
   Chromium e2e uses, pinned by digest, plus the Lambda runtime interface
   client and playwright-core, installed with `npm ci` from the lockfile in
   `backend/renderer-deps/`, whose `overrides` lift the runtime client's
