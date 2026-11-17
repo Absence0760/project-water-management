@@ -4,11 +4,12 @@
 // quotes), a missing or empty key is refused by name without running
 // Terraform, and --preflight decrypts nothing. The rotation counter comes from
 // the file's plaintext sops.lastmodified (an explicit TF_VAR_ wins, a var file
-// that pins it is refused, missing metadata is a clear error). Needs bash and
-// node. No AWS.
+// that pins it is refused, missing metadata is a clear error). A *.sops var
+// file is decrypted to a private temporary copy that Terraform reads and that
+// is gone afterwards. Needs bash and node. No AWS.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -48,19 +49,25 @@ function setup({ withSops = true, secretsFile = SOPS_FILE() } = {}) {
 	// Only what tf.sh and the fakes use, so a real sops elsewhere on PATH can't answer.
 	const bin = join(dir, 'bin');
 	mkdirSync(bin);
-	for (const tool of ['dirname', 'printenv', 'node', 'sh', 'awk', 'grep']) symlinkSync(which(tool), join(bin, tool));
+	for (const tool of ['dirname', 'printenv', 'node', 'sh', 'awk', 'grep', 'mktemp', 'rm']) symlinkSync(which(tool), join(bin, tool));
 	if (withSops) {
 		writeFileSync(join(bin, 'sops'), `#!/bin/sh\nexec node ${join(here, 'tf-stubs', 'sops.mjs')} "$@"\n`);
 		chmodSync(join(bin, 'sops'), 0o755);
 	}
-	// Reports its arguments, the TF_VAR_ values it got, and any bare key left behind.
+	// Reports its arguments, the TF_VAR_ values it got, any bare key left
+	// behind, and each -var-file it was given as it saw it (body and mode).
 	writeFileSync(
 		join(bin, 'terraform'),
 		`#!/usr/bin/env node
-const { appendFileSync } = require('node:fs');
+const { appendFileSync, readFileSync, statSync } = require('node:fs');
 const keys = ${JSON.stringify([...KEYS, ...OPTIONAL_KEYS])};
+const args = process.argv.slice(2);
+const varFiles = args.flatMap((a, i) => a.startsWith('-var-file=') ? [a.slice(10)] : args[i - 1] === '-var-file' ? [a] : []);
 appendFileSync(process.env.FAKE_TF_LOG, JSON.stringify({
-	args: process.argv.slice(2),
+	args,
+	varFiles: varFiles.map((path) => {
+		try { return { path, body: readFileSync(path, 'utf8'), mode: statSync(path).mode & 0o777 }; } catch { return { path }; }
+	}),
 	tfvars: Object.fromEntries(keys.filter((k) => ('TF_VAR_' + k) in process.env).map((k) => [k, process.env['TF_VAR_' + k]])),
 	bare: keys.filter((k) => k in process.env),
 	version: process.env.TF_VAR_runtime_secret_version,
@@ -70,7 +77,8 @@ appendFileSync(process.env.FAKE_TF_LOG, JSON.stringify({
 	chmodSync(join(bin, 'terraform'), 0o755);
 	const secrets = join(dir, 'prod.sops.yaml');
 	writeFileSync(secrets, secretsFile);
-	const files = { tfLog: join(dir, 'tf.log'), sopsLog: join(dir, 'sops.log') };
+	const files = { tfLog: join(dir, 'tf.log'), sopsLog: join(dir, 'sops.log'), tmp: join(dir, 'tmp') };
+	mkdirSync(files.tmp);
 	writeFileSync(files.tfLog, '');
 	writeFileSync(files.sopsLog, '');
 	return { dir, bin, secrets, files };
@@ -87,6 +95,7 @@ function run(ctx, args, env = {}) {
 			FAKE_TF_LOG: ctx.files.tfLog,
 			FAKE_SOPS_LOG: ctx.files.sopsLog,
 			FAKE_SOPS_ENV: JSON.stringify(VALUES),
+			TMPDIR: ctx.files.tmp,
 			...env,
 		},
 	});
@@ -257,4 +266,70 @@ test('refuses a var file that would pin the counter', () => {
 	writeFileSync(join(ok.dir, 'prod.tfvars'), 'aws_region = "af-south-1"\n');
 	const r = run(ok, ['plan', '-var-file=prod.tfvars']);
 	assert.equal(r.status, 0, r.stderr);
+});
+
+// --- An encrypted var file (*.sops) ---------------------------------------------
+
+// The fake sops "decrypts" by copying, so this synthetic body stands in for
+// infra-secrets/water-management/prod.tfvars.sops.
+const VARS = 'aws_region = "af-south-1"\ndomain_name = "water.example.test"\n';
+
+test('a *.sops var file reaches Terraform decrypted, private, and is removed after', () => {
+	for (const form of [(p) => [`-var-file=${p}`], (p) => ['-var-file', p]]) {
+		const ctx = setup();
+		writeFileSync(join(ctx.dir, 'prod.tfvars.sops'), VARS);
+		const r = run(ctx, ['plan', ...form('prod.tfvars.sops'), '-out=plan'], { AWS_PROFILE: 'water-management' });
+		assert.equal(r.status, 0, r.stderr);
+		assert.equal(r.stdout, '', 'prints nothing of its own');
+		const [vf] = r.tf[0].varFiles;
+		assert.match(vf.path, /\/prod\.tfvars$/, 'named without .sops, so Terraform parses it as HCL');
+		assert.ok(vf.path.startsWith(ctx.files.tmp + '/'), 'in a temporary directory, outside the repo');
+		assert.equal(vf.body, VARS);
+		assert.equal(vf.mode, 0o600);
+		assert.deepEqual(r.tf[0].args, ['plan', ...form(vf.path), '-out=plan']);
+		assert.deepEqual(r.sops[0], { args: ['--decrypt', '--input-type', 'binary', '--output-type', 'binary', 'prod.tfvars.sops'], profile: 'water-management' });
+		assert.equal(r.sops[1].args[0], 'exec-env', 'the runtime secrets still come through exec-env');
+		assert.deepEqual(r.tf[0].tfvars, VALUES);
+		assert.deepEqual(readdirSync(ctx.files.tmp), [], 'the decrypted copy is gone');
+	}
+});
+
+test('a *.sops var file is found from the -chdir directory, and plaintext ones are untouched beside it', () => {
+	const ctx = setup();
+	mkdirSync(join(ctx.dir, 'infra'));
+	writeFileSync(join(ctx.dir, 'infra', 'prod.tfvars.sops'), VARS);
+	writeFileSync(join(ctx.dir, 'infra', 'extra.tfvars'), 'x = 1\n');
+	const r = run(ctx, ['-chdir=infra', 'plan', '-var-file=prod.tfvars.sops', '-var-file=extra.tfvars']);
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(r.tf[0].varFiles[0].body, VARS);
+	assert.equal(r.tf[0].args[3], '-var-file=extra.tfvars');
+	assert.deepEqual(readdirSync(ctx.files.tmp), []);
+});
+
+test('a *.sops var file that pins the counter is refused by its own name, and removed', () => {
+	const ctx = setup();
+	writeFileSync(join(ctx.dir, 'prod.tfvars.sops'), VARS + 'runtime_secret_version = 1\n');
+	const r = run(ctx, ['plan', '-var-file=prod.tfvars.sops']);
+	assert.notEqual(r.status, 0);
+	assert.match(r.stderr, /^tf\.sh: prod\.tfvars\.sops sets runtime_secret_version/m);
+	assert.deepEqual(r.tf, []);
+	assert.equal(r.sops.length, 1, 'decrypted the var file, never the runtime secrets');
+	assert.deepEqual(readdirSync(ctx.files.tmp), []);
+});
+
+test('a *.sops var file that fails to decrypt or is missing stops before Terraform', () => {
+	const ctx = setup();
+	writeFileSync(join(ctx.dir, 'prod.tfvars.sops'), VARS);
+	let r = run(ctx, ['plan', '-var-file=prod.tfvars.sops'], { FAKE_SOPS_DECRYPT_FAIL: '1' });
+	assert.notEqual(r.status, 0);
+	assert.match(r.stderr, /could not decrypt prod\.tfvars\.sops/);
+	assert.ok(!r.stderr.includes('domain_name'), 'prints nothing of the file');
+	assert.deepEqual(r.tf, []);
+	assert.deepEqual(readdirSync(ctx.files.tmp), []);
+
+	r = run(setup(), ['plan', '-var-file=nope.tfvars.sops']);
+	assert.notEqual(r.status, 0);
+	assert.match(r.stderr, /no such var file: (\.\/)?nope\.tfvars\.sops/);
+	assert.deepEqual(r.tf, []);
+	assert.deepEqual(r.sops, []);
 });

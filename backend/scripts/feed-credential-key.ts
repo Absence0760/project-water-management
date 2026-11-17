@@ -6,7 +6,7 @@
 // Prints both halves, base64url, and writes nothing: the operator runs it on
 // their own machine, puts the private half in infra-secrets
 // (water-management/prod.sops.yaml, key feed_credential_private_key: the
-// fetcher's runtime secret) and the public half in prod.tfvars
+// fetcher's runtime secret) and the public half in prod.tfvars.sops
 // (feed_credential_public_key), then clears the terminal. Never run it where
 // the output is recorded (a CI log, an agent's transcript): the private half
 // opens every station key saved under its public half.
@@ -19,7 +19,7 @@ import { generateFeedCredentialKeys } from '../src/feeds/credential.js';
 export function feedCredentialKeyText(keys: { publicKey: string; privateKey: string }): string {
 	return [
 		'# Station API feeds: a new X25519 key pair (docs/deployment.md § Station API feeds).',
-		'# Public half: prod.tfvars (not a secret).',
+		'# Public half: prod.tfvars.sops (not a secret).',
 		`feed_credential_public_key = "${keys.publicKey}"`,
 		'# Private half: infra-secrets water-management/prod.sops.yaml only. Never commit it, paste it in a chat or keep this output.',
 		`feed_credential_private_key: "${keys.privateKey}"`,

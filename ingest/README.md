@@ -702,7 +702,7 @@ written as `0x7FC00000`. When a file is copied again:
 
 `polite.PoliteClient` is the only way this job reaches the network:
 
-- **User-Agent:** `water-management-ingest/1 (+https://github.com/Absence0760/project-water-management; <INGEST_CONTACT>)`.
+- **User-Agent:** `water-management-ingest/1 (+https://github.com/jaredhoward-dev/project-water-management; <INGEST_CONTACT>)`.
 - **Conditional GETs:** it sends `If-None-Match` and `If-Modified-Since`, and a 304 means the file is skipped.
 - **Pacing:** at most one request a second (`min_interval`), retries included, and one request at a time.
 - **Range requests:** `byte_range=(first, last)` sends `Range` for a few pixels of a TIFF (`verify_copy.py`), paced like any request.

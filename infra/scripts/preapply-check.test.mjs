@@ -5,7 +5,7 @@
 // makes only read-only calls. Needs bash and jq. No AWS account.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -52,14 +52,18 @@ function healthy() {
 	};
 }
 
-function run({ state = {}, args = ['--profile', 'water-management', '--region', 'af-south-1'], varFile, backendConfig = `bucket = "${BUCKET}"\n` } = {}) {
+function run({ state = {}, args = ['--profile', 'water-management', '--region', 'af-south-1'], varFile, varName = 'prod.tfvars', backendConfig = `bucket = "${BUCKET}"\n` } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'preapply-check-'));
-	const aws = join(dir, 'aws');
-	writeFileSync(aws, `#!/bin/sh\nexec node ${join(here, 'check-stubs/aws.mjs')} "$@"\n`);
-	chmodSync(aws, 0o755);
-	const files = { state: join(dir, 'state.json'), log: join(dir, 'aws.log'), backend: join(dir, 'backend.config'), vars: join(dir, 'prod.tfvars') };
+	// A fake sops too: it "decrypts" a *.sops var file by copying it.
+	for (const [tool, stub] of [['aws', 'check-stubs/aws.mjs'], ['sops', 'tf-stubs/sops.mjs']]) {
+		writeFileSync(join(dir, tool), `#!/bin/sh\nexec node ${join(here, stub)} "$@"\n`);
+		chmodSync(join(dir, tool), 0o755);
+	}
+	const files = { state: join(dir, 'state.json'), log: join(dir, 'aws.log'), sopsLog: join(dir, 'sops.log'), tmp: join(dir, 'tmp'), backend: join(dir, 'backend.config'), vars: join(dir, varName) };
+	mkdirSync(files.tmp);
 	writeFileSync(files.state, JSON.stringify({ ...healthy(), ...state }));
 	writeFileSync(files.log, '');
+	writeFileSync(files.sopsLog, '');
 	writeFileSync(files.backend, backendConfig);
 	const extra = ['--backend-config', files.backend];
 	if (varFile !== undefined) {
@@ -68,11 +72,12 @@ function run({ state = {}, args = ['--profile', 'water-management', '--region', 
 	}
 	const r = spawnSync('bash', [script, ...args, ...extra], {
 		encoding: 'utf8',
-		env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, FAKE_AWS_STATE: files.state, FAKE_AWS_LOG: files.log },
+		env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TMPDIR: files.tmp, FAKE_AWS_STATE: files.state, FAKE_AWS_LOG: files.log, FAKE_SOPS_LOG: files.sopsLog },
 	});
-	const calls = readFileSync(files.log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+	const lines = (f) => readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+	const calls = lines(files.log);
 	const line = (name) => r.stdout.split('\n').find((l) => new RegExp(`^(PASS|FAIL)  ${name} `).test(l)) ?? '';
-	return { ...r, calls, line };
+	return { ...r, calls, line, sops: lines(files.sopsLog), leftover: readdirSync(files.tmp).filter((n) => n.startsWith('tmp.')) };
 }
 
 test('every check passes against a ready account, with read-only calls only', () => {
@@ -152,6 +157,23 @@ test('station_api_feeds on adds the station trigger\'s 2 to the fetcher\'s reser
 	assert.doesNotMatch(off.line('lambda-quota'), /station-fetch/);
 	const commented = run({ varFile: '# station_api_feeds = true\n', state: quota(52.0) });
 	assert.equal(commented.status, 0, commented.stdout);
+});
+
+test('a *.sops var file is decrypted as --profile, read like a plaintext one, and removed', () => {
+	const r = run({
+		args: ['--profile', 'water-management'],
+		varName: 'prod.tfvars.sops',
+		varFile: 'aws_region = "af-south-1"\ndb_instance_class = "db.t4g.small"\n',
+	});
+	assert.equal(r.status, 0, r.stdout + r.stderr);
+	assert.equal(r.sops.length, 1);
+	assert.deepEqual(r.sops[0].args.slice(0, 5), ['--decrypt', '--input-type', 'binary', '--output-type', 'binary']);
+	assert.match(r.sops[0].args[5], /prod\.tfvars\.sops$/);
+	assert.equal(r.sops[0].profile, 'water-management');
+	assert.equal(r.calls.find((c) => c.op === 'describe-orderable-db-instance-options').args['--db-instance-class'], 'db.t4g.small');
+	assert.deepEqual(r.leftover, [], 'the decrypted copy is gone');
+	// A plaintext var file never calls sops.
+	assert.deepEqual(run({ varFile: 'aws_region = "af-south-1"\n' }).sops, []);
 });
 
 test('--reserved replaces the parsed sum; a reservation that is not a number fails with that hint', () => {

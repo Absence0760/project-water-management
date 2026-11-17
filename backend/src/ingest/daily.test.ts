@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MIRROR_FIXTURE, MIRROR_FIXTURE_DIR } from '../../scripts/gen-mirror-fixture.js';
 import { cellCentre, chcCell } from '../feeds/cellCache.js';
-import { FeedFormatError, FeedRefusedError } from '../feeds/errors.js';
+import { FeedFormatError, FeedRefusedError, FeedThrottledError } from '../feeds/errors.js';
 import { fixtureHttp } from '../feeds/fixtures.js';
 import type { FeedHttp } from '../feeds/http.js';
 import { chirpsPrelimUrl, gridValues } from '../feeds/sources/chirps.js';
@@ -25,7 +25,10 @@ import {
 	prelimDayOf,
 	readRegionDay,
 	regionPlacement,
-	runDailyIngest
+	runDailyIngest,
+	THROTTLE_MAX_RETRIES,
+	THROTTLE_RETRY_REQUEST_MS,
+	type ThrottledAttempt
 } from './daily.js';
 
 const tmp: string[] = [];
@@ -273,6 +276,108 @@ describe('the daily ingest of preliminary sat days', () => {
 	});
 });
 
+/** `inner`, but the first `times` requests for `url` answer HTTP 429 (with `retryAfter` when given); logs each request's start. */
+function throttling(inner: FeedHttp, url: string, times: number, retryAfter: number | null = null, clock?: () => number) {
+	let left = times;
+	const starts: { url: string; at: number }[] = [];
+	const gate = (u: string) => {
+		starts.push({ url: u, at: clock?.() ?? 0 });
+		if (u === url && left > 0) {
+			left--;
+			throw new FeedThrottledError(429, retryAfter);
+		}
+	};
+	const http: FeedHttp = {
+		range: async (u, s, e) => (gate(u), inner.range(u, s, e)),
+		rangeTagged: async (u, s, e) => (gate(u), inner.rangeTagged!(u, s, e)),
+		text: async (u) => (gate(u), inner.text(u))
+	};
+	return { http, starts };
+}
+
+describe('the daily ingest waits out a 429 and asks again (CHC, 2026-11-10)', () => {
+	const setup = async (times: number, retryAfter: number | null = null) => {
+		const { store } = freshStore();
+		await satFinalsThrough(store, '2026-01');
+		let clock = 0;
+		const sleeps: number[] = [];
+		const events: ThrottledAttempt[] = [];
+		const inner = filesHttp(published('2026-02-01', '2026-02-03'));
+		const { http, starts } = throttling(inner.http, chirpsPrelimUrl('2026-02-02'), times, retryAfter, () => clock);
+		const go = (over: Partial<Parameters<typeof runDailyIngest>[0]> = {}) =>
+			run(store, http, '2026-02-10', {
+				intervalMs: 1000,
+				now: () => clock,
+				sleep: async (ms) => void (sleeps.push(ms), (clock += ms)),
+				onThrottled: (t) => events.push(t),
+				...over
+			});
+		return { go, sleeps, events, starts };
+	};
+
+	it('a 429 then success copies the day: the default wait (60 s, the live client’s own pause), the retry counted as a request', async () => {
+		const { go, sleeps, events, starts } = await setup(1);
+		const r = await go({ deadline: 10 * 60_000 });
+		expect(r).toMatchObject({ copied: ['2026-02-01', '2026-02-02', '2026-02-03'], prelimThrough: '2026-02-03', stopped: 'not_published', error: null });
+		expect(r.requests).toBe(3 * 3 + 1 + 1);
+		expect(events).toEqual([{ url: chirpsPrelimUrl('2026-02-02'), status: 429, attempt: 1, of: THROTTLE_MAX_RETRIES + 1, retryAfterSeconds: null, waitSeconds: 60, retrying: true }]);
+		expect(sleeps).toContain(60_000);
+		const day2 = starts.filter((s) => s.url === chirpsPrelimUrl('2026-02-02'));
+		expect(day2[1]!.at - day2[0]!.at).toBeGreaterThanOrEqual(60_000);
+	});
+
+	it('honours Retry-After', async () => {
+		const { go, sleeps, events, starts } = await setup(1, 7);
+		const r = await go({ deadline: 10 * 60_000 });
+		expect(r.copied).toHaveLength(3);
+		expect(events).toMatchObject([{ attempt: 1, retryAfterSeconds: 7, waitSeconds: 7, retrying: true }]);
+		expect(sleeps).toContain(7000);
+		expect(sleeps).not.toContain(60_000);
+		const day2 = starts.filter((s) => s.url === chirpsPrelimUrl('2026-02-02'));
+		expect(day2[1]!.at - day2[0]!.at).toBe(7000);
+	});
+
+	it('stops after 3 retries (60, 120, 240 s), keeping the days copied before it', async () => {
+		const { go, events, starts } = await setup(Infinity);
+		const r = await go();
+		expect(r.stopped).toBe('error');
+		expect(r.error).toBeInstanceOf(FeedThrottledError);
+		expect(r.copied).toEqual(['2026-02-01']);
+		expect(starts.filter((s) => s.url === chirpsPrelimUrl('2026-02-02'))).toHaveLength(THROTTLE_MAX_RETRIES + 1);
+		expect(events.map((e) => [e.attempt, e.waitSeconds, e.retrying])).toEqual([
+			[1, 60, true],
+			[2, 120, true],
+			[3, 240, true],
+			[4, 480, false]
+		]);
+		expect(starts.at(-1)!.url).toBe(chirpsPrelimUrl('2026-02-02'));
+	});
+
+	it('does not retry when the deadline leaves no room for the wait and the request', async () => {
+		const { go, events, starts, sleeps } = await setup(1);
+		// Day 1 takes ~3 s, so 60 s + THROTTLE_RETRY_REQUEST_MS more ends past the deadline.
+		const r = await go({ deadline: 60_000 + THROTTLE_RETRY_REQUEST_MS });
+		expect(r).toMatchObject({ copied: ['2026-02-01'], stopped: 'error' });
+		expect(r.error).toBeInstanceOf(FeedThrottledError);
+		expect(events).toMatchObject([{ attempt: 1, waitSeconds: 60, retrying: false }]);
+		expect(starts.filter((s) => s.url === chirpsPrelimUrl('2026-02-02'))).toHaveLength(1);
+		expect(sleeps.every((ms) => ms <= 1000)).toBe(true);
+	});
+
+	it('never retries a 403', async () => {
+		const { store } = freshStore();
+		await satFinalsThrough(store, '2026-01');
+		const files = published('2026-02-01', '2026-02-03');
+		files.set('2026-02-02', 'refused');
+		const { http, log } = filesHttp(files);
+		const events: ThrottledAttempt[] = [];
+		const r = await run(store, http, '2026-02-10', { onThrottled: (t) => events.push(t) });
+		expect(r.error).toBeInstanceOf(FeedRefusedError);
+		expect(log.filter((u) => u === chirpsPrelimUrl('2026-02-02'))).toHaveLength(1);
+		expect(events).toEqual([]);
+	});
+});
+
 describe('the daily ingest’s parts', () => {
 	it('paces requests at least intervalMs apart', async () => {
 		let t = 0;
@@ -285,6 +390,24 @@ describe('the daily ingest’s parts', () => {
 		}
 		expect(starts).toEqual([0, 1000, 2000]);
 		expect(counter.requests).toBe(3);
+	});
+
+	it('without `retry`, throws a 429 at once (the other passes that share the paced client)', async () => {
+		let asked = 0;
+		const inner: FeedHttp = { range: async () => (asked++, Promise.reject(new FeedThrottledError(429, 5))), text: async () => null };
+		const { http, counter } = pacedHttp(inner, 0, () => 0, async () => {});
+		await expect(http.range('u', 0, 0)).rejects.toBeInstanceOf(FeedThrottledError);
+		expect([asked, counter.requests]).toEqual([1, 1]);
+	});
+
+	it('with `retry`, a wait past THROTTLE_MAX_SECONDS is not waited', async () => {
+		let asked = 0;
+		const events: ThrottledAttempt[] = [];
+		const inner: FeedHttp = { range: async () => (asked++, Promise.reject(new FeedThrottledError(503, 3600))), text: async () => null };
+		const { http } = pacedHttp(inner, 0, () => 0, async () => {}, { onThrottled: (t) => events.push(t) });
+		await expect(http.range('u', 0, 0)).rejects.toBeInstanceOf(FeedThrottledError);
+		expect(asked).toBe(1);
+		expect(events).toMatchObject([{ status: 503, retryAfterSeconds: 3600, retrying: false }]);
 	});
 
 	it('places the region on the file in whole cells, and refuses another grid or a misaligned one', () => {

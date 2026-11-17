@@ -88,7 +88,7 @@ export const CHANNELS_KEY = 'channels.pmtiles';
 export const FONTS_PREFIX = 'fonts';
 
 /** One descriptive User-Agent for the HEAD of an upstream (docs/data-sources.md § The polite-client checklist). */
-export const USER_AGENT = 'water-management-tiles-upload/1 (+https://github.com/Absence0760/project-water-management)';
+export const USER_AGENT = 'water-management-tiles-upload/1 (+https://github.com/jaredhoward-dev/project-water-management)';
 
 /** The largest object one PutObject takes; past it, use `aws s3 cp` (multipart) and record with --dry-run's file. */
 export const MAX_PUT_BYTES = 5 * 1024 ** 3;

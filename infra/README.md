@@ -263,7 +263,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `redirect_domains` (former hostnames → their zones, `{}` for none), `github_repo`, `budget_alert_email`, `feeds_contact`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `assistant.tf` | The AI assistant (issue #610), all behind `assistant_enabled`: its Lambda, role, log group, security group, Function URL (`RESPONSE_STREAM`), the one-model Bedrock policy (by model id: in-region, a geographic profile or the global profile), the `bedrock-runtime` interface endpoint, its security group and endpoint policy, and the rules to Postgres and the Secrets Manager endpoint; its CloudFront origin and behaviour are in `s3_cloudfront.tf`, its alarms and budget in `alarms.tf` |
 | `secrets.tf` | The API, worker, migrate (and, when enabled, assistant) Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
-| `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
+| `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. A `-var-file` ending in `.sops` (`prod.tfvars.sops`) is decrypted to a private temporary copy for the run (`sops-var-file.sh`, shared with the check scripts). Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds`, and its alarm: an EventBridge rule on CloudTrail's `DisableKey` / `ScheduleKeyDeletion` / `PutKeyPolicy` / `RevokeGrant` for the key (by key ID or ARN) to the regional alerts topic (free; needs a CloudTrail trail, step 7a) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
@@ -800,22 +800,27 @@ Claude does not run any of these, and none of them print a secret. Replace
    with `openssl rand -hex 32` (JWT, alert-token secret, app encryption
    key) and `openssl rand -hex 24` (db password) inside the editor; the
    report-download signing key (`cloudfront_private_key`) is an RSA key pair
-   whose public half goes in `prod.tfvars`
+   whose public half goes in `prod.tfvars.sops`
    ([docs/deployment.md § The report-download signing key](../docs/deployment.md#the-report-download-signing-key)).
    - `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`
      (the KMS key lives in the bootstrap region)
    - `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`
    - Commit and push `infra-secrets`.
 6. **Non-secret config.** Following the estate pattern (feohledger,
-   threkir), keep it in the private repo as
-   `~/github/infra-secrets/water-management/prod.tfvars`, based on
-   [`terraform.tfvars.example`](./terraform.tfvars.example). Confirm
+   threkir), keep it in the private repo, sops-encrypted (binary format,
+   the same `alias/water-management-sops` key), as
+   `~/github/infra-secrets/water-management/prod.tfvars.sops`, based on
+   [`terraform.tfvars.example`](./terraform.tfvars.example). Create and edit
+   it with `AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`;
+   `tf.sh`, `preapply-check.sh`, `postapply-check.sh` and `restore-db.sh`
+   take the `.sops` file as their var file and decrypt it to a private
+   temporary copy that is removed when they exit. Confirm
    `rds_customer_managed_key` there (default `true`): it can't be changed
    after the first apply (§ Database encryption key).
 7. **Backend config:**
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 7a. **Pre-apply check** (read-only; needs step 7's `backend.config`):
-   `cd ~/github/project-water-management/infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   `cd ~/github/project-water-management/infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops`
    PASS/FAIL per check, exit 1 on any FAIL: the Lambda concurrency quota
    (step 3; the sum of every `*_reserved_concurrency`, `variables.tf`
    defaults overridden by plain numbers in the tfvars, + 10; `--reserved <n>`
@@ -846,14 +851,15 @@ Claude does not run any of these, and none of them print a secret. Replace
    (2026-10-05: a stale checkout's plan wanted to put back an
    `rds.force_ssl` diff #430 had removed).
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
-   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars.sops -out="$HOME/.cache/water-management/prod.tfplan"`
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
 
    `tf.sh` decrypts `prod.sops.yaml` in memory and passes the runtime secrets
    as ephemeral variables; the apply needs them again (a saved plan doesn't
    keep them), which is why it goes through `tf.sh` too. A saved plan no
    longer holds the sops values, but it still holds a copy of state, and so
-   the CloudFront shared secret, so it is still written outside the repo and
+   the CloudFront shared secret, and every variable value from
+   `prod.tfvars.sops` in plaintext, so it is still written outside the repo and
    deleted once applied. If you don't apply it, delete it
    yourself: `rm -f ~/.cache/water-management/prod.tfplan`. `.gitignore`
    also ignores `*.tfplan` as a backstop.
@@ -862,7 +868,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    SNS email subscriptions afterwards: the regional topic and the us-east-1
    topic (the us-east-1 one carries every budget and cost-anomaly alert).
    Then run the post-apply check (read-only):
-   `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops`
    (add `--redirect-from <host>` for each former hostname while
    `redirect_domains` holds one: `--redirect-from water-management.jaredhoward.com`
    since issue #551). It FAILS while a subscription is still `PendingConfirmation`, and checks
@@ -912,7 +918,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    each deploy workflow).
 9a. **Approval gate.** Confirm the `production` environment exists with you
    as a required reviewer:
-   `gh api repos/Absence0760/project-water-management/environments/production --jq '.protection_rules'`.
+   `gh api repos/jaredhoward-dev/project-water-management/environments/production --jq '.protection_rules'`.
    If not: `cd ~/github/templates && ./scripts/backfill-prod-environment.sh --apply`.
    Required reviewers need a **public** repo (or GitHub Pro/Team for a
    private one); the release preflight refuses to deploy without them.
@@ -944,7 +950,8 @@ Claude does not run any of these, and none of them print a secret. Replace
     pushed the renderer image to ECR, tagged `<version>-<first 12 hex of the
     released commit>` (e.g. `0.1.0-0123456789ab`), and left a notice naming
     the tag and saying the function doesn't exist yet. Set
-    `renderer_image_tag` to that tag in `prod.tfvars`, then plan and apply
+    `renderer_image_tag` to that tag in `prod.tfvars.sops`
+    (`AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`), then plan and apply
     (step 8). Every later backend release moves the function to its own
     image; the tag in `prod.tfvars` is what a (re-)created function starts
     from, and the ECR lifecycle policy never expires the image it names
@@ -1003,7 +1010,7 @@ Claude does not run any of these, and none of them print a secret. Replace
     `aws rds reboot-db-instance --db-instance-identifier water-management --region <region> --profile water-management`
     Within a few minutes a "DB instance restarted" email (an `availability`
     event) should arrive at `budget_alert_email`. Then run
-    `./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --rds-event-test`:
+    `./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops --rds-event-test`:
     `rds-delivery` compares the instance's subscribed events of the last 24
     hours (`rds describe-events`) with the topic's `NumberOfMessagesPublished`
     and `NumberOfNotificationsFailed`; events with nothing published FAIL (the
@@ -1017,7 +1024,7 @@ Claude does not run any of these, and none of them print a secret. Replace
     data as breaching and would fire daily before then). A backend release
     pushes the ingest image as `<version>-<sha12>` and leaves a notice naming
     the tag. **Set `ingest_image_tag` after the first image push**
-    in `prod.tfvars` (its User-Agent names `feeds_contact`, the one contact
+    in `prod.tfvars.sops` (its User-Agent names `feeds_contact`, the one contact
     the fetcher uses too), then plan and apply (step 8): the function, its two daily schedules'
     targets and the `mirror-lag-*` alarms appear, and the rules switch to
     ENABLED. The ECR lifecycle policy never expires the tagged image, as for
@@ -1031,12 +1038,12 @@ Claude does not run any of these, and none of them print a secret. Replace
     Explorer users, so check first:
     `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension,MonitorArn]'`.
     - **No `DIMENSIONAL` / `SERVICE` monitor listed:** set
-      `cost_anomaly_threshold_usd = 10` in `prod.tfvars`, then plan and apply
+      `cost_anomaly_threshold_usd = 10` in `prod.tfvars.sops`, then plan and apply
       (step 8). The plan adds `aws_ce_anomaly_monitor.services[0]` and its
       subscription to the us-east-1 alerts topic.
     - **One is listed:** set `cost_anomaly_threshold_usd = 10`, adopt it
       before planning:
-      `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh import -var-file=../../infra-secrets/water-management/prod.tfvars 'aws_ce_anomaly_monitor.services[0]' <MonitorArn>`,
+      `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh import -var-file=../../infra-secrets/water-management/prod.tfvars.sops 'aws_ce_anomaly_monitor.services[0]' <MonitorArn>`,
       then plan. It should show the monitor renamed in place (to
       `water-management-services`) and the subscription added; if it shows
       the monitor replaced, stop and ask. AWS's default monitor may come with
@@ -1075,12 +1082,12 @@ source and apply instead.
   `-var runtime_secret_version=$(date -u +%Y%m%d%H%M%S)` to the apply (or
   export `TF_VAR_runtime_secret_version`, which `tf.sh` then leaves alone).
   The next plain run returns to `lastmodified` and rewrites once more.
-- **Never set `runtime_secret_version` in `prod.tfvars`** (or any var file):
+- **Never set `runtime_secret_version` in `prod.tfvars.sops`** (or any var file):
   Terraform ranks var files above `tf.sh`'s value, so it would pin the
   counter and silently stop rotation. `tf.sh` refuses to run if one does.
 
 The apply, for any of the sops keys:
-`cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`
+`cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops`
 
 - **`db_app_password`:** edit it with sops, apply, and invoke the migrate Lambda straight away. The API fails DB logins
   until you do:
@@ -1097,11 +1104,11 @@ The apply, for any of the sops keys:
   `alerts_enabled = false` (docs/deployment.md § Runbooks, alert storm).
 - **CloudFront shared secret** (not in sops: replacing it rewrites the runtime
   secrets in the same apply, `replace_triggered_by` in `secrets.tf`):
-  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
+  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).
 - **`cloudfront_private_key`** (report download links, the API only): an
   RSA key pair the operator generates; the public half is
-  `report_download_public_keys` in `prod.tfvars`. Rotate with two keys
+  `report_download_public_keys` in `prod.tfvars.sops`. Rotate with two keys
   overlapping (add the new public key and apply; put the new private key in
   sops and point `report_download_signing_key` at it, apply; drop the old
   public key, apply), so no valid link fails. The API refuses to start if
