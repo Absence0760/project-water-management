@@ -2060,7 +2060,7 @@ mirror](./deployment.md#the-data-mirror)).
 
 ```
 EventBridge, daily
-  ├─► mirror-ingest (Python 3.14 container Lambda, outside the VPC)
+  ├─► mirror-ingest (Python 3.15 container Lambda, outside the VPC)
   │     rnl, sat finals: CHC's byMonth NetCDF, one conditional GET a day, the new
   │     or rewritten month downloaded whole, subset to the region, hashed (D8)
   ├─► daily ingest (the fetcher Lambda's new mode, Node, outside the VPC)

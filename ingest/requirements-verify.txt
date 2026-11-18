@@ -13,7 +13,7 @@
 # (the constraints), and run, holding Dependabot's 7-day cooldown:
 #
 #   uv pip compile <that file> -c <constraints> --generate-hashes \
-#     --python-version 3.14 --python-platform linux \
+#     --python-version 3.15 --python-platform linux \
 #     --exclude-newer <a date a week ago> --no-header --no-annotate
 boto3==1.43.126 \
     --hash=sha256:5fda4a3dd2782c134a01d1678911962c2860dd8de8cd10bef168ba1507b371a9 \

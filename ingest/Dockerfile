@@ -4,10 +4,10 @@
 #
 # Build context is ingest/, arm64 only. The handler is lambda_handler.handler.
 #
-# The base is AWS's Lambda Python 3.14 image, the arm64 tag pinned by digest
+# The base is AWS's Lambda Python 3.15 image, the arm64 tag pinned by digest
 # (`pnpm check:pins` refuses a FROM without one, and a pip install without
 # --require-hashes). Moving it: look the digest up, never guess it,
-#   docker buildx imagetools inspect public.ecr.aws/lambda/python:3.14-arm64
+#   docker buildx imagetools inspect public.ecr.aws/lambda/python:3.15-arm64
 # and put the tag and the new digest here together. Dependabot's docker entry
 # for /ingest (.github/dependabot.yml) proposes the same move.
 FROM public.ecr.aws/lambda/python:3.15-arm64@sha256:505a1d4216c7e32169b0b801ebcb6c9e75c4e89bd25b09eb24a1a7ffbac7f3cf

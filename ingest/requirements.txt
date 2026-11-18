@@ -13,7 +13,7 @@
 # wheels with the library bundled, x86_64 and aarch64) one per line in a scratch file and run
 # uv, holding Dependabot's 7-day cooldown:
 #
-#   uv pip compile <that file> --generate-hashes --python-version 3.14 \
+#   uv pip compile <that file> --generate-hashes --python-version 3.15 \
 #     --python-platform linux --exclude-newer <a date a week ago> \
 #     --no-header --no-annotate
 #
