@@ -60,6 +60,12 @@ services:
       - "127.0.0.1:8026:8025"
     environment:
       MP_MAX_MESSAGES: 500
+      # Mailpit holds every SMTP greeting until a reverse DNS lookup of the
+      # client returns (the docker gateway's address, which has no name): a
+      # slow or dropped answer stalled a send 5 s a try, and with it the API
+      # request waiting on the send (issue #731: POST /auth/mfa/reset in
+      # mfa-reset-mailpit.spec.ts). Nothing reads the name.
+      MP_SMTP_DISABLE_RDNS: "true"
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 2s

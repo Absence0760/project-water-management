@@ -197,6 +197,30 @@ export const evaporationLabel = (d: Pick<EvaporationDataset, 'kind' | 'source'>)
 export const citeEvaporation = (d: Pick<EvaporationDataset, 'dataset' | 'source' | 'version' | 'firstYear' | 'lastYear'>) =>
 	`${d.source} (${d.version}, ${evaporationPeriodWords(d)}; dataset “${d.dataset}”)`;
 
+/**
+ * Where /data-sources credits a dataset (an `id` in the frontend's
+ * lib/components/legal/dataCredits.ts): the WRC Atlas's A-pan by its label,
+ * any reference-ET grid but the committed synthetic one as dPET (the only one
+ * production loads, referenceLoad.ts); any other grid (PenPan, an invented
+ * one) the page itself.
+ */
+export const evaporationCreditPath = (d: Pick<EvaporationDataset, 'dataset' | 'kind' | 'source'>): string => {
+	if (d.kind === 'apan' && d.source.startsWith(ATLAS_APAN_LABEL)) return '/data-sources#atlas-apan';
+	if (d.kind === 'et0' && d.dataset !== SYNTHETIC_EVAPORATION_DATASET) return '/data-sources#dpet';
+	return '/data-sources';
+};
+
+/**
+ * A dataset's stable reference, for a revision's reason (issue #763): its
+ * label, version and period, and where its long source, method and credit
+ * live (the evaporation_dataset row, and /data-sources). Short whatever the
+ * source says, so a reason under REASON_MAX keeps it whole, where the full
+ * citation (citeEvaporation; the Atlas's source alone is ~330 characters) was
+ * cut off.
+ */
+export const referenceEvaporation = (d: Pick<EvaporationDataset, 'dataset' | 'kind' | 'source' | 'version' | 'firstYear' | 'lastYear'>) =>
+	`dataset “${d.dataset}” (${d.version}, ${evaporationPeriodWords(d)}; its source and method as the dataset records them, credit at ${evaporationCreditPath(d)})`;
+
 /** "1991–2020 monthly means", or, for a grid whose source states no period (issue #755), "monthly means, no period stated by the source". */
 export const evaporationPeriodWords = (d: Pick<EvaporationDataset, 'firstYear' | 'lastYear'>): string =>
 	d.firstYear !== null && d.lastYear !== null ? `${d.firstYear}–${d.lastYear} monthly means` : 'monthly means, no period stated by the source';

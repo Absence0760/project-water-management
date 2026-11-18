@@ -6,12 +6,17 @@ import {
 	SETTINGS_PATHS,
 	TRANSFER_SET_FIELDS,
 	cropFieldError,
+	monthlyRatesMismatch,
+	withMonthlyRates,
 	landCoverFieldError,
 	nodeFieldError,
 	settingsValueError,
 	transferFieldError
 } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { applyScenario, type ModelInput, type ScenarioOp, type Transfer, type TransferSetField } from '@water-management/engine';
+import { newNode } from '#lib/model/editor.svelte.js';
+import { snapshotInput } from './ops';
 import { pumpUnit, riverToDamUnit, type FlowUnitId } from '#lib/components/network/flowUnit.svelte.js';
 import {
 	CROP_FIELD_SPECS,
@@ -20,14 +25,18 @@ import {
 	NODE_FIELD_SPECS,
 	SETTINGS_SPECS,
 	TRANSFER_FIELD_SPECS,
+	TRANSFER_FIELDS,
 	formatValue,
 	monthsText,
+	nodeChoices,
 	nodeFields,
 	parseValue,
 	peDraftOf,
 	rescaleText,
 	percentMessage,
 	settingsValue,
+	transferChoices,
+	transferFieldsFor,
 	valueText,
 	type ValueSpec
 } from './fields';
@@ -406,6 +415,40 @@ describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.35.0)
 	});
 });
 
+describe('another unit’s dam for a unit’s crops (node.set cropRemoteNodeId, engine 1.118.0)', () => {
+	const spec = NODE_FIELD_SPECS.cropRemoteNodeId.spec as Extract<ValueSpec, { t: 'node' }>;
+	const nodes = [
+		{ id: 'G', kind: 'gauge' as const, damCapacityM3: 0 },
+		{ id: 'A', kind: 'farm' as const, damCapacityM3: 150_000 },
+		{ id: 'B', kind: 'farm' as const, damCapacityM3: 0 },
+		// A dam the scenario added (node.add), in the model the op meets.
+		{ id: 'H', kind: 'farm' as const, damCapacityM3: 400_000 },
+		{ id: 'U', kind: 'user' as const, damCapacityM3: 0 }
+	];
+
+	it('picks only another unit with a dam in the model the op meets, or none', () => {
+		expect(spec).toEqual({ t: 'node', nullLabel: 'none', withDam: true });
+		expect(nodeChoices(spec, nodes, 'B').map((n) => n.id)).toEqual(['A', 'H']);
+		// The unit itself is never its own other unit, dam or not.
+		expect(nodeChoices(spec, nodes, 'A').map((n) => n.id)).toEqual(['H']);
+		// A dam an earlier op took away is not offered.
+		expect(nodeChoices(spec, nodes.map((n) => (n.id === 'H' ? { ...n, damCapacityM3: 0 } : n)), 'B').map((n) => n.id)).toEqual(['A']);
+		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		expect(parseValue(spec, 'H')).toEqual({ ok: true, value: 'H' });
+	});
+
+	it('leaves the other node pickers every unit', () => {
+		expect(nodeChoices(TRANSFER_FIELD_SPECS.fromNodeId.spec as Extract<ValueSpec, { t: 'node' }>, nodes, 'A').map((n) => n.id)).toEqual(['A', 'B', 'H']);
+	});
+
+	it('is a unit field, left out for an application (the engine refuses it there)', () => {
+		expect(nodeFields('farm').some((f) => f.field === 'cropRemoteNodeId')).toBe(true);
+		expect(nodeFields('farm', { remoteDam: false }).some((f) => f.field === 'cropRemoteNodeId')).toBe(false);
+		expect(nodeFields('farm', { remoteDam: false })).toHaveLength(NODE_SET_FIELDS.farm.length - 1);
+		expect(nodeFields('user').some((f) => f.field === 'cropRemoteNodeId')).toBe(false);
+	});
+});
+
 describe('an other water user’s priority (issue #507 item 4)', () => {
 	it('offers the stored senior / junior as Priority / Non-priority, and shows them that way', () => {
 		const spec = NODE_FIELD_SPECS.userPriority.spec;
@@ -482,5 +525,145 @@ describe('pump capacities and River to dam in m³/s, l/s or m³/day (issue #523 
 			expect(rescaleText(NODE_FIELD_SPECS.damCapacityM3.spec, '5', 1000 / 86_400)).toBe('5');
 		});
 		picked('ls', () => expect(rescaleText(NODE_FIELD_SPECS.divertMonthlyM3Day.spec, '0.01 0.02 0 0 0 0 0 0 0 0 0 0', 1 / 86_400)).toBe('10 20 0 0 0 0 0 0 0 0 0 0'));
+	});
+});
+
+describe('the transfer fields Add a change offers for a rule (engine 1.14.0 monthly rates)', () => {
+	const single = { months: [10, 11, 12], maxRateM3s: 0.2, monthlyRateM3s: null };
+	const monthly = withMonthlyRates([0.1, 0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0.05, 0.3]);
+	const offered = (t: Parameters<typeof transferFieldsFor>[0]) => transferFieldsFor(t).map((f) => f.field);
+
+	it('offers every field for a rule with one maximum rate, and before a rule is picked', () => {
+		expect(transferFieldsFor(single)).toEqual(TRANSFER_FIELDS);
+		expect(transferFieldsFor({ monthlyRateM3s: undefined })).toEqual(TRANSFER_FIELDS);
+		expect(transferFieldsFor(undefined)).toEqual(TRANSFER_FIELDS);
+	});
+
+	it('drops the months and the one maximum rate for a rule with monthly rates, and keeps the monthly rates and the rest', () => {
+		const fields = offered(monthly);
+		expect(fields).not.toContain('months');
+		expect(fields).not.toContain('maxRateM3s');
+		expect(fields).toContain('monthlyRateM3s');
+		expect(fields).toEqual(TRANSFER_FIELDS.map((f) => f.field).filter((f) => f !== 'months' && f !== 'maxRateM3s'));
+	});
+
+	it('hides exactly the rate fields whose change the engine’s save rule refuses on that rule', () => {
+		// A change to each rate field, applied the way transfer.set applies it (monthlyRateM3s also sets the pair).
+		const changed = {
+			months: (t: typeof monthly) => ({ ...t, months: [...t.months, 1] }),
+			maxRateM3s: (t: typeof monthly) => ({ ...t, maxRateM3s: t.maxRateM3s + 1 }),
+			monthlyRateM3s: (t: typeof monthly) => ({ ...t, ...withMonthlyRates(t.monthlyRateM3s.map((x) => x * 2)) })
+		};
+		expect(monthlyRatesMismatch(monthly)).toBeNull();
+		for (const [field, change] of Object.entries(changed)) expect(offered(monthly).includes(field as never), field).toBe(monthlyRatesMismatch(change(monthly)) === null);
+		// On a rule with one rate the pair is free to change.
+		expect(monthlyRatesMismatch({ ...single, months: [1, 2], maxRateM3s: 5 })).toBeNull();
+	});
+});
+
+describe('the choices Add a change offers for a transfer field: exactly what the engine takes on that rule', () => {
+	// Synthetic ids and invented names. HI drains into LO, LO into UP, UP into the outlet gauge; US is an other water user.
+	const G = '00000000-0000-4000-8000-000000000001';
+	const UP = '00000000-0000-4000-8000-000000000002';
+	const LO = '00000000-0000-4000-8000-000000000003';
+	const HI = '00000000-0000-4000-8000-000000000004';
+	const US = '00000000-0000-4000-8000-000000000005';
+	const DAM = '00000000-0000-4000-8000-0000000000a1';
+	const OUT = '00000000-0000-4000-8000-0000000000a2';
+	const RIVER = '00000000-0000-4000-8000-0000000000a3';
+	const CURVE = '00000000-0000-4000-8000-0000000000a4';
+	const MONTHLY = '00000000-0000-4000-8000-0000000000a5';
+	const UNITS = [UP, LO, HI];
+	const rule = (id: string, from: string, to: string | null, more: Partial<Transfer> = {}): Transfer => ({
+		id,
+		fromNodeId: from,
+		toNodeId: to,
+		months: [11, 12],
+		maxRateM3s: 0.01,
+		dailyCapM3: null,
+		minStoragePct: 0.2,
+		enabled: true,
+		priority: 0,
+		...more
+	});
+	const curve = { diversionCoefficient: 2, diversionExponent: 0.5, diversionMaxPct: 0.4, diversionFlowUnit: 'm3/s', diversionFlowBasis: 'modelled' } as const;
+	function base(): ModelInput {
+		const farm = (id: string, i: number, down: string, name: string) => ({ ...newNode(i, down), id, name, areaKm2: 10, damCapacityM3: 100_000 });
+		const user = { ...newNode(4, UP), id: US, kind: 'user' as const, name: 'Town' };
+		return snapshotInput(
+			{
+				nodes: [{ ...newNode(0, null), id: G, name: 'Outflow gauge' }, farm(UP, 1, G, 'Upper farm'), farm(LO, 2, UP, 'Lower farm'), farm(HI, 3, LO, 'Hill farm'), user],
+				crops: [],
+				cropAreas: [],
+				transfers: [
+					rule(DAM, UP, LO),
+					rule(OUT, UP, null),
+					rule(RIVER, LO, UP, { source: 'river', sizing: 'demand' }),
+					rule(CURVE, LO, UP, { source: 'river', sizing: 'diversionCurve', ...curve }),
+					rule(MONTHLY, LO, HI, withMonthlyRates([0.1, 0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0.05, 0.3]))
+				]
+			},
+			{ simulationStart: null, apanMm: new Array(12).fill(100) }
+		);
+	}
+	const input = base();
+	const accepted = (id: string, field: TransferSetField, value: unknown) => applyScenario(input, [{ op: 'transfer.set', transferId: id, field, value } as ScenarioOp]).problems.length === 0;
+	const choices = (id: string, field: TransferSetField) => transferChoices(input, id, field, UNITS);
+
+	it('starts from a model the engine takes whole', () => {
+		expect(applyScenario(input, []).problems).toEqual([]);
+	});
+
+	it('offers a share of the river’s flow only on a river off-take with a complete curve', () => {
+		expect(choices(DAM, 'sizing')).toEqual(['demand', 'capacity']);
+		expect(choices(RIVER, 'sizing')).toEqual(['demand', 'capacity']);
+		expect(choices(CURVE, 'sizing')).toEqual(['demand', 'capacity', 'diversionCurve']);
+	});
+
+	it('offers the river as the source only to a rule that can be an off-take, and the dam only to one not sized by a formula', () => {
+		// Upper → Lower: Lower drains into Upper, so as an off-take it would take water before it arrives.
+		expect(choices(DAM, 'source')).toEqual(['dam']);
+		expect(choices(RIVER, 'source')).toEqual(['dam', 'river']);
+		// Out of the catchment: a dam rule only.
+		expect(choices(OUT, 'source')).toEqual(['dam']);
+		expect(choices(CURVE, 'source')).toEqual(['river']);
+	});
+
+	it('offers out of the catchment and the ends a rule may have, never its own source or one that loops an off-take', () => {
+		expect(choices(DAM, 'toNodeId')).toEqual(['', LO, HI]);
+		// An off-take from LO: not out of the catchment, not to itself, not to HI, which drains into it.
+		expect(choices(RIVER, 'toNodeId')).toEqual([UP]);
+		expect(choices(DAM, 'fromNodeId')).toEqual([UP, HI]);
+		// Its seepage rejoins the river at the source (none, or named) or below it, never above.
+		expect(choices(RIVER, 'lossReturnNodeId')).toEqual(['', UP, LO]);
+		expect(choices(RIVER, 'diversionFlowUnit')).toContain('');
+		expect(choices(CURVE, 'diversionFlowUnit')).not.toContain('');
+	});
+
+	it('agrees with the engine on every choice of every choice field of every rule', () => {
+		for (const t of input.model.transfers)
+			for (const field of Object.keys(TRANSFER_FIELD_SPECS) as TransferSetField[]) {
+				const spec = TRANSFER_FIELD_SPECS[field].spec;
+				const all =
+					spec.t === 'enum' ? [...(spec.nullable ? [''] : []), ...spec.options.map((o) => o.value)] : spec.t === 'bool' ? ['true', 'false'] : spec.t === 'node' ? [...(spec.nullLabel !== undefined ? [''] : []), ...UNITS] : null;
+				const got = choices(t.id, field);
+				if (!all) {
+					expect(got, field).toBeNull();
+					continue;
+				}
+				const value = (text: string) => (spec.t === 'bool' ? text === 'true' : text === '' ? null : text);
+				expect(got, `${t.id} ${field}`).toEqual(all.filter((text) => accepted(t.id, field, value(text))));
+			}
+		expect(transferChoices(input, '00000000-0000-4000-8000-0000000000ff', 'sizing', UNITS)).toBeNull();
+	});
+
+	it('hides the months and the one maximum rate exactly where the engine refuses a change to them', () => {
+		for (const t of input.model.transfers) {
+			const fields = transferFieldsFor(t).map((f) => f.field);
+			expect(fields.includes('months'), t.id).toBe(accepted(t.id, 'months', [1, 2, 3]));
+			expect(fields.includes('maxRateM3s'), t.id).toBe(accepted(t.id, 'maxRateM3s', 0.7));
+			expect(fields.includes('monthlyRateM3s')).toBe(true);
+		}
+		expect(transferFieldsFor(input.model.transfers.find((t) => t.id === MONTHLY)).map((f) => f.field)).not.toContain('months');
 	});
 });

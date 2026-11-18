@@ -4,7 +4,9 @@
 // Synthetic data only: the seeded catchment's two farm dams, plus a third farm's dam with no minimum level.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { addMember, createProject, createRun, node, putModel, sampleModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
+import { createScenario } from '../support/scenarios.ts';
 import { pinClockToProject } from '../support/clock.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { loadSyntheticDamRegister } from '../support/damRegister.ts';
@@ -484,4 +486,86 @@ test('a dam resized since the run: the Network’s drawing shows today’s capac
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
 	await expect(page.locator('svg.schematic g.node[data-changed]')).toHaveCount(0);
+});
+
+test('the Run menu picks an older scenario run whose dam the latest run hasn’t: its card shows, run= and dam= survive a reload, Back returns', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Dams run picker');
+	const base = await createRun(page.request, project.id, 'Baseline');
+	// The operator's case: a scenario adds a unit with a dam, then the model is run again, so the newest run has no Hexberg.
+	const gauge = project.model.nodes.find((n) => n.kind === 'gauge')!.id as string;
+	const hexberg = node('Hexberg', 'farm', gauge, 9, { damCapacityM3: 400_000, areaKm2: 5 });
+	const scenarioId = await createScenario(page.request, project.id, { name: 'Hexberg Dam', baseRunId: base, ops: [{ op: 'node.add', node: hexberg }] });
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.ok()).toBe(true);
+	const scenarioRun = ((await ran.json()) as { run: { id: string } }).run.id;
+	const later = await createRun(page.request, project.id, 'Later run');
+	await pinClockToProject(page, project.id, 'lastRunAt'); // "ran today" (support/clock.ts)
+
+	// The newest run by default: two dams, no Hexberg.
+	await openDams(page, project.id);
+	const select = page.getByRole('combobox', { name: 'Run' });
+	await expect(select).toHaveValue(later);
+	await expect(select.locator(`option[value="${scenarioRun}"]`)).toHaveText(/^Hexberg Dam \(scenario\) · today \d{2}:\d{2} · /);
+	await expect(select.locator(`option[value="${later}"]`)).toHaveText(/^Later run · today .* · latest/);
+	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 240\u202f000 m³ capacity · latest run “Later run”, ran today');
+	await expect(cards(page)).toHaveCount(2);
+	await expect(card(page, 'Hexberg')).toHaveCount(0);
+	await expect(page.getByTestId('dams-scenario-note')).toHaveCount(0);
+	await chartReady(page);
+
+	// The scenario's run: in the URL, its dam has a card as it ran (no "changed" mark, no node sheet links), and a note names it.
+	await select.selectOption(scenarioRun);
+	await expect(page).toHaveURL(new RegExp(`[?&]run=${scenarioRun}`));
+	await expect(cards(page)).toHaveCount(3);
+	await expect(page.getByTestId('dams-summary')).toHaveText('3 dams · 640\u202f000 m³ capacity · run “Hexberg Dam (scenario)”, ran today');
+	const hex = card(page, 'Hexberg');
+	await expect(hex.locator('.card-head .cap')).toHaveText('400\u202f000 m³');
+	await expect(hex.locator('.level .v')).toHaveText(/^\d+%$/);
+	await expect(page.getByTestId('dam-changed')).toHaveCount(0);
+	await expect(hex.getByTestId('dam-edit-link')).toHaveCount(0);
+	const note = page.getByTestId('dams-scenario-note');
+	await expect(note).toHaveText(/^Scenario run: Hexberg Dam, against the base run Baseline \(today \d{2}:\d{2}\)\./);
+	await expect(note.getByRole('link', { name: 'Open the scenario' })).toHaveAttribute('href', `?tab=scenarios&scenario=${scenarioId}`);
+
+	// Pick Hexberg: both settings in the URL, and a reload keeps them.
+	await hex.getByRole('link', { name: 'Hexberg', exact: true }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]run=${scenarioRun}&dam=${hexberg.id}$`));
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText('Storage: Hexberg');
+	await chartReady(page);
+	await expect(page.getByTestId('dam-facts')).toContainText('of 400\u202f000 m³');
+	await page.reload();
+	await expect(select).toHaveValue(scenarioRun);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText('Storage: Hexberg');
+	await chartReady(page);
+	await expectNoViolations(page);
+
+	// Back to the newest run with dam=Hexberg still in the URL: no such dam there, so the chart falls back to the first card.
+	await select.selectOption(later);
+	await expect(page).toHaveURL(new RegExp(`[?&]run=${later}&dam=${hexberg.id}$`));
+	await expect(cards(page)).toHaveCount(2);
+	const first = (await cards(page).first().locator('.name').textContent())!;
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${first}`);
+	await chartReady(page);
+	// Back returns to the scenario's run, Hexberg picked.
+	await page.goBack();
+	await expect(select).toHaveValue(scenarioRun);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText('Storage: Hexberg');
+
+	// The note's base link switches to the base run, which has no Hexberg either and no note.
+	await note.getByRole('link', { name: 'Show the base run' }).click();
+	await expect(select).toHaveValue(base);
+	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 240\u202f000 m³ capacity · run “Baseline”, ran today');
+	await expect(page.getByTestId('dams-scenario-note')).toHaveCount(0);
+});
+
+test('a run= naming a deleted run shows the newest, and says so', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dams run gone');
+	await createRun(page.request, project.id, 'Baseline');
+	await pinClockToProject(page, project.id, 'lastRunAt');
+	await openDams(page, project.id, `&run=${crypto.randomUUID()}`);
+	await expect(page.getByTestId('dams-run-gone')).toHaveText('That run no longer exists, so this shows the newest run.');
+	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 240\u202f000 m³ capacity · latest run “Baseline”, ran today');
 });

@@ -32,6 +32,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { REASON_MAX } from '../history/record.js';
 import { ATLAS_APAN, atlasApanMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import type { Position } from './geojson.js';
 
@@ -136,7 +137,7 @@ describe('accepting the proposal', () => {
 		expect(s.pe).toEqual({ kind: 'monthly', mm: BASE, source: expect.stringMatching(/^Proposed from the map: reference evapotranspiration \(FAO-56 Penman-Monteith ET₀\), SYNTHETIC .*synthetic 1, 1991–2020 monthly means; dataset “synthetic”\), area-weighted over the 4 grid cells the catchment boundary “Catchment” covers \(100 % of it has values\); taken as GR4J's PE unchanged\.$/) });
 		expect(s.apanMm).toEqual(before.apanMm);
 		expect(s.panCoefficient).toEqual(before.panCoefficient);
-		expect(await lastReason()).toMatch(/^GR4J’s monthly PE from the map: 1335 mm a year of reference evapotranspiration .*; SYNTHETIC .* Pre-summarised at import/);
+		expect(await lastReason()).toMatch(/^GR4J’s monthly PE from the map: 1335 mm a year of reference evapotranspiration .*; dataset “synthetic” \(synthetic 1, 1991–2020 monthly means; its source and method as the dataset records them, credit at \/data-sources\)\.$/);
 		const acc = (await proposals(viewer)).body.accepted;
 		expect(acc).toEqual([
 			expect.objectContaining({ target: 'pe', kind: 'et0', monthlyMm: BASE, dataset: 'synthetic', version: 'synthetic 1', coverage: 1, current: true })
@@ -176,7 +177,7 @@ describe('accepting the proposal', () => {
 		const s = await settings();
 		expect(s.apanMm).toEqual(row);
 		expect(s.pe).toEqual(pe);
-		expect(await lastReason()).toMatch(/^A-pan evaporation from the map: 1845 mm a year of Class-A pan evaporation, .*; Test A-pan grid \(v1, 2000–2009 monthly means; dataset “test-apan”\)\. Test method\./);
+		expect(await lastReason()).toMatch(/^A-pan evaporation from the map: 1845 mm a year of Class-A pan evaporation, .*; dataset “test-apan” \(v1, 2000–2009 monthly means; its source and method as the dataset records them, credit at \/data-sources\)\.$/);
 		const acc = (await proposals(viewer)).body.accepted;
 		expect(acc.map((a: { target: string; current: boolean }) => [a.target, a.current])).toEqual([
 			['apan', true],
@@ -192,7 +193,6 @@ describe('accepting the proposal', () => {
 		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 		await client.connect();
 		try {
-			// A short source, so the revision reason (500 characters) keeps the whole citation.
 			const meta = { dataset: 'test-apan-no-period', kind: 'apan' as const, source: 'Test Atlas grid', version: 'v1', attribution: ATLAS_APAN.attribution, method: atlasApanMethodFor(0.1, null, null) };
 			const cells = [-338, -337].flatMap((r) => [212, 213].map((c) => ({ row: r, col: c, monthlyMm: row })));
 			expect(await replaceEvaporationDataset(client, meta, { cellDeg: 0.1, originLon: 0.05, originLat: 0.05, firstYear: null, lastYear: null, cells, partial: 0 })).toBe(4);
@@ -210,7 +210,7 @@ describe('accepting the proposal', () => {
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect((await settings()).apanMm).toEqual(row);
 		const reason = await lastReason();
-		expect(reason).toContain('Test Atlas grid (v1, monthly means, no period stated by the source; dataset “test-apan-no-period”)');
+		expect(reason).toContain('dataset “test-apan-no-period” (v1, monthly means, no period stated by the source;');
 		expect(reason).not.toMatch(/null|NaN/);
 		expect((await proposals(viewer, '?dataset=test-apan-no-period')).body.dataset.method).toContain('the Atlas states no period for its means');
 		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan-no-period'`);
@@ -235,7 +235,13 @@ describe('accepting the proposal', () => {
 			const res = await accept(editor, { dataset: 'Atlas-Apan-2007' });
 			expect(res.status, JSON.stringify(res.body)).toBe(200);
 			expect((await settings()).apanMm).toEqual(row);
-			expect(await lastReason()).toMatch(/^A-pan evaporation from the map: [\d.]+ mm a year of modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)/);
+			// The real Atlas source (~330 characters) and method (~460): the reason cites the dataset by its reference, whole (issue #763).
+			const reason = await lastReason();
+			expect(reason).toMatch(/^A-pan evaporation from the map: [\d.]+ mm a year of modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)/);
+			expect(reason).toMatch(
+				/; dataset “Atlas-Apan-2007” \(Atlas of Agrohydrology 2008 \(monthly A-pan equivalent grids\), monthly means, no period stated by the source; its source and method as the dataset records them, credit at \/data-sources#atlas-apan\)\.$/
+			);
+			expect(reason.length).toBeLessThanOrEqual(REASON_MAX);
 		} finally {
 			await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'Atlas-Apan-2007'`);
 		}

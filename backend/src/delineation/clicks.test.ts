@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
+import { REASON_MAX } from '../history/record.js';
 import {
 	clickRequest,
 	ClicksBody,
@@ -177,6 +178,31 @@ describe('the request and the names', () => {
 		);
 		expect(saveSummary(r, [r.pieces[1]!, r.pieces[2]!])).toBe('2 sub-catchments, 15.00 km² in all; 1 inflow point not saved (Sub-catchment 1)');
 		expect(saveSummary(r, [r.pieces[2]!])).toBe('1 sub-catchment, 12.00 km² in all; 1 inflow point not saved (Sub-catchment 1); 1 couldn’t be outlined and weren’t saved');
+	});
+
+	it('pieceDescription keeps the elevation model and method whole however many inflows enter, counting the rest (issue #763)', () => {
+		const sq = { type: 'Polygon' as const, coordinates: [[[20, -33], [20.1, -33], [20.1, -33.1], [20, -33]]] as [number, number][][] };
+		const base = { snapDistanceM: 10, geometry: sq, open: true, larger: null, nonContributingM2: 0, areaM2: null, totalAreaM2: null, feature: null };
+		// 60 inflows with 100-character names (FEATURE_NAME_MAX) drain into the lowest click.
+		const inflows = Array.from({ length: 60 }, (_, i) => ({ ...base, name: `Inflow ${i} ${'x'.repeat(90)}`.slice(0, 100), label: String(i + 2), click: i + 1, point: [20.2, -33.6] as [number, number], drainsInto: 0 }));
+		const lowest = { ...base, open: false, name: pieceName(0), label: '1', click: 0, point: [20.3, -33.7] as [number, number], drainsInto: null, areaM2: 12e6, nonContributingM2: 1.25e6 };
+		const r: ClickPieces = {
+			pieces: [lowest, ...inflows],
+			firstNumber: 1,
+			dropped: [],
+			lowest: 0,
+			within: null,
+			cellSizeM: 30,
+			dataset: { label: 'Copernicus GLO-30', fingerprint: '0123456789abcdef' },
+			method: 'D8',
+			methodVersion: 'start-18'
+		};
+		const text = pieceDescription(r, lowest);
+		expect(text.length).toBeLessThanOrEqual(REASON_MAX);
+		expect(text).toMatch(/^The land draining to 20.30000° E, 33.70000° S before any other click; /);
+		expect(text).toMatch(/; an inflow enters at “Inflow 0 x+” and 59 more\. 1\.25 km² of its own area drains into pans/);
+		expect(text.endsWith('Delineated from Copernicus GLO-30 (start-18); check it against the map.')).toBe(true);
+		expect(text).not.toContain('…');
 	});
 
 	it('names a piece by its click’s number, as the badge shows it, and the catchment outlet’s piece by the outlet', () => {

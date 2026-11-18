@@ -37,7 +37,7 @@ import { panReferenceLoader } from './panReference.js';
 import type { Geometry, Position } from '../geo/geojson.js';
 import { pointInGeometry } from '../geo/geojson.js';
 import { loadFeature, toFeature } from '../geo/routes.js';
-import { recordAudit } from '../history/record.js';
+import { fitList, fitReason, REASON_MAX, recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { logEvent } from '../logging/logEvent.js';
@@ -386,18 +386,25 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
 const deg = (v: number) => (Math.round(v * 1e5) / 1e5).toFixed(5);
 
-/** A saved piece's description: its outlet, where it drains, what is upstream (and the inflows entering it), the dataset and method. Pure. */
+/**
+ * A saved piece's description: its outlet, where it drains, what is upstream (and the inflows entering it), the dataset
+ * and method. At most REASON_MAX characters, the citation always whole: the inflows' names (which grow with the clicks)
+ * are listed only as far as they fit, the rest counted (issue #763). Pure.
+ */
 export function pieceDescription(r: ClickPieces, p: ClickPiece): string {
 	const nameOf = (click: number) => r.pieces.find((q) => q.click === click)?.name ?? pieceName(click, r.firstNumber);
 	const lower = (n: string) => (/^Sub-catchment /.test(n) ? n.toLowerCase() : `“${n}”`);
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => lower(q.name));
-	return (
+	const head =
 		`The land draining to ${deg(p.point[0])}° E, ${deg(Math.abs(p.point[1]))}° ${p.point[1] < 0 ? 'S' : 'N'} before any other click; ` +
 		`${p.drainsInto === null ? (p.click === OUTLET_CLICK ? 'the catchment’s delineated outlet' : 'the lowest click') : `drains into ${lower(nameOf(p.drainsInto))}`}; ` +
-		`${p.totalAreaM2 !== null ? `${km2(p.totalAreaM2)} upstream in all` : 'more upstream than was routed'}${inflows.length ? `; an inflow enters at ${inflows.join(' and ')}` : ''}. ` +
-		`${p.nonContributingM2 ? `${km2(p.nonContributingM2)} of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). ` : ''}` +
-		`Delineated from ${r.dataset.label} (${r.methodVersion}); check it against the map.`
-	).slice(0, 500);
+		`${p.totalAreaM2 !== null ? `${km2(p.totalAreaM2)} upstream in all` : 'more upstream than was routed'}`;
+	const pans = `. ${p.nonContributingM2 ? `${km2(p.nonContributingM2)} of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). ` : ''}`;
+	const tail = `Delineated from ${r.dataset.label} (${r.methodVersion}); check it against the map.`;
+	const open = '; an inflow enters at ';
+	const room = REASON_MAX - head.length - pans.length - tail.length - open.length;
+	const entering = inflows.length ? `${open}${fitList(inflows, room, ' and ', (n) => `${n} sub-catchments`)}` : '';
+	return fitReason(`${head}${entering}${pans}`, tail);
 }
 
 /**

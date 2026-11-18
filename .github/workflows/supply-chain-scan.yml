@@ -11,9 +11,17 @@ name: supply-chain-scan
 # Advisory first: findings go to code scanning (SARIF, categories `zizmor`
 # and `osv-scanner`) and to the job summary, and neither job fails on a
 # finding. Neither tool is named in a code-scanning merge ruleset, so their
-# alerts do not block a merge either. The zizmor baseline is fixed, with
-# six reasoned inline suppressions (docs/deployment.md); making these checks
-# blocking waits on a CISO / Security Analyst sign-off.
+# alerts do not block a merge either.
+#
+# Adopting it: copy this file as is. Then read the first run's findings in
+# Security > Code scanning (tools `zizmor` and `osv-scanner`) and fix them
+# at the root; a zizmor finding you keep gets an inline `# zizmor: ignore[...]`
+# with a reason, an osv finding a reviewed, expiring `[[IgnoredVulns]]` entry
+# in an `osv-scanner.toml` at the repo root (used when present; Scorecard's
+# Vulnerabilities check reads the same file). Making either check blocking
+# is a merge-gate change: add the tool to the code-scanning merge ruleset
+# (not a `needs:` in ci.yml) once the baseline is clean and the change is
+# signed off.
 #
 # Data flow: osv-scanner runs with --offline-vulnerabilities, so it downloads
 # the public OSV database and sends no package list anywhere. zizmor's online
@@ -129,9 +137,13 @@ jobs:
           set -euo pipefail
           bin="$RUNNER_TEMP/osv-scanner/osv-scanner"
           export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$RUNNER_TEMP/osv-db"
-          # osv-scanner.toml holds the reviewed, expiring ignores. Passed explicitly
-          # so it applies to every lockfile the recursive scan finds.
-          args=(scan source --recursive --offline-vulnerabilities --download-offline-databases --config=osv-scanner.toml)
+          args=(scan source --recursive --offline-vulnerabilities --download-offline-databases)
+          # osv-scanner.toml, when the project has one, holds the reviewed,
+          # expiring ignores. Passed explicitly so it applies to every
+          # lockfile the recursive scan finds, not only those beside it.
+          if [ -f osv-scanner.toml ]; then
+            args+=(--config=osv-scanner.toml)
+          fi
           check() {
             case "$1" in
               0|1|128) ;;

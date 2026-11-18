@@ -2455,6 +2455,14 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   their nodes, and each unit's dams and pump to it. A boundary redrawn
   since the proposal is refused (409) when its area is ticked. The proposal
   keeps the plan and the ticks.
+- **What History says.** A start's or a division's revision reason counts
+  what it did ("Started from the map: 4 hydrological units; 2 areas (gross)
+  and 1 drains-into from …", "Divided from the map: …") and ends with the
+  elevation model and the method version. That citation is always kept
+  whole (`backend/src/delineation/reasons.ts`, `fitReason`, issue #763):
+  past the reason's 500 characters, only the names of the areas taken
+  effective are shortened, as many as fit and the rest counted ("A, B and
+  12 more", or "14 areas"), never cut mid-word.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
   above drain into it), owning no land; applied, a `gauge` node linked to
@@ -2641,7 +2649,9 @@ clicking the rivers, with no points to place and no roles to pick first.
   "Sub-catchment *n*" by its click's number, after those already on the map
   ("Sub-catchment at the outlet" for the outlet's piece), its description the outlet, where it drains, the
   area upstream (or "more upstream than was routed"), the inflow points
-  entering it, the dataset and the method version, and its outlet in
+  entering it, the dataset and the method version (at most 500 characters,
+  the dataset and method always whole: past it, the inflows are named as
+  far as they fit and the rest counted, "… and 12 more"; issue #763), and its outlet in
   `properties.subcatchment`; the saved pieces whose land changed it redraws
   (above).
 - **Then straight on to the network.** After a Save the Map opens the
@@ -2867,7 +2877,12 @@ it.
   (…) (2021 v200; dataset “WorldCover-2021-v200”). Pre-summarised at
   import: …"), which History, the run comparison and an evidence pack's
   revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
-  same citation. The box shows that provenance beside each crop, and says
+  same citation. The citation is always whole (its short reference,
+  `dataset “…” (version)`, when a long source would crowd out the rest); the
+  method fills what is left of the reason's 500 characters and is cut on a
+  whole word with "…" (`plantedReason` in `croplandRoutes.ts`,
+  `fitNotedReason` and `clipWords` in `history/record.ts`); the row keeps the
+  whole method. The box shows that provenance beside each crop, and says
   "Typed over since" once the area no longer matches it. While the model has
   unsaved changes, Use waits. Viewers see the summary but not Use. The row records the polygons the area was summed over
   (`polygons`, 273), so the Map's [Checks](#checks) and the Start data list
@@ -3082,14 +3097,26 @@ grid's kind, and **nothing is converted between them**:
   /projects/:id/evaporation-from-map` with the dataset
   ([api.md § Catchment map](./api.md#catchment-map)): the server re-derives
   the 12 values from the boundary as it is, writes them into the settings,
-  records one settings revision whose reason cites the dataset, version and
-  method ("GR4J’s monthly PE from the map: 1335 mm a year of reference
-  evapotranspiration (FAO-56 Penman-Monteith ET₀), area-weighted over the 4
-  grid cells the catchment boundary “Catchment” covers (100 % of it has
-  values); dPET, … (hPET v3 …, 1991–2020 monthly means; dataset
-  “dPET-1991-2020”). Pre-summarised at import: …"), which History, the run
-  comparison and an evidence pack's revisions list carry, and keeps an
-  `evaporation_accepted` row (181) with the same citation. The row records the boundary it was summarised over
+  records one settings revision whose reason cites the dataset by its
+  stable reference: its label, version and period, and where its source,
+  method and credit are ("GR4J’s monthly PE from the map: 1335 mm a year of
+  reference evapotranspiration (FAO-56 Penman-Monteith ET₀), area-weighted
+  over the 4 grid cells the catchment boundary “Catchment” covers (100 % of
+  it has values); dataset “dPET-1991-2020” (hPET v3 …, 1991–2020 monthly
+  means; its source and method as the dataset records them, credit at
+  /data-sources#dpet)."), which History, the run comparison and an evidence
+  pack's revisions list carry. The reason is capped at 500 characters
+  (`REASON_MAX`), and the full source and method don't fit it (the WRC
+  Atlas's source alone is about 330, its method about 460), so they stay on
+  the `evaporation_dataset` row and the `evaporation_accepted` row (181),
+  which keeps the full citation; the reference always survives whole, and
+  only the description before it (a long boundary name) is shortened, on a
+  whole word with "…" (`fitReason`, issue #763; a run of more than 30
+  characters with no space is cut where it must). The Atlas's reference ends at
+  `/data-sources#atlas-apan`, a reference-ET grid's at `#dpet`, any other
+  grid's at the page. A monthly PE's `source` keeps the full citation when
+  it fits its 600 characters, else the reference, never a cut-off citation.
+  The accepted row records the boundary it was summarised over
   (`boundary`, 273): after the boundary is redrawn, the Map's
   [Checks](#checks) and the Start data list say to propose it again (issue
   #646 F8). A monthly PE's own
@@ -3328,7 +3355,10 @@ map proposes, the modeller picks and accepts.
   station and re-derives the means, writes the A-pan row as one settings
   revision whose reason cites the station, its pan, its distance, the
   months the means came from, any conversion (its equation by name) and the
-  dataset's source, which History, run comparison and an evidence pack's
+  dataset's source (last and always whole: the conversion note before it is
+  what gets shortened to fit the reason's 500 characters, and a source past
+  half of them is cited as the dataset's label and a `/data-sources` link,
+  its text staying on the station's row; issue #763), which History, run comparison and an evidence pack's
   revisions carry, and writes the daily series when asked (queueing a
   re-run and automatic calibration as any new series does). While Settings
   has unsaved changes, Use waits. A Class-A or Symons pan only: the
@@ -3431,8 +3461,11 @@ Symons-pan (S-pan) depths and the irrigation module's 12 monthly Class-A pan
   `settings.apanMm` as one settings revision whose reason names the dataset,
   each quaternary with its share (and where its irrigation modules
   disagree), how many module files the rows came from, any part left out,
-  the S-pan total and the source. While Settings has unsaved changes, Use
-  waits.
+  the S-pan total and the source. The source comes last and is kept whole
+  (a long quaternary list before it is what gets shortened to fit the
+  reason's 500 characters; a source past half of them is cited as the
+  dataset's label and `/data-sources#wrc-water-resources`; issue #763).
+  While Settings has unsaved changes, Use waits.
 - **Dam evaporation.** The WR90 lake-factor presets (Settings → Demand)
   start from the A-pan row and turn it back into S-pan with the WR90 or
   Taljaard (2023) equation (`lakeFactorPresets.ts`, S = a × A + b), not with
@@ -3450,7 +3483,9 @@ Taljaard (2023), with the same floors and warning as a Symons station
 ([§ Evaporation stations](#evaporation-stations)); an optional note says
 where they come from. **Use** saves through
 `POST /projects/:id/evaporation-from-span` as one revision giving the months,
-the note and the equation.
+the note and the equation; the months and the equation are kept whole, and
+only a long note is shortened to fit the reason's 500 characters (issue
+#763).
 
 - **Who sees them.** A viewer's read; a farmer gets 403 and a non-member 404.
 
@@ -3777,7 +3812,10 @@ to matter. A viewer reads it too.
 - **Use for each unit** (editors, "Saves now", asks first; `POST
   …/map/unit-apan`) saves each covered unit's 12 months into
   `settings.apanUnits` with the option itself (`settings.apanBasis:
-  'units'`), as one settings revision citing the grid (History). The model
+  'units'`), as one settings revision citing the grid by its reference, as
+  Evaporation from the map's does (the left-out unit names are what gets
+  shortened to fit; `settings.apanUnits.source` keeps the full citation when
+  it fits, issue #763) (History). The model
   then runs each unit on its own A-pan (engine ≥ 1.117.0, [model.md
   §2.3b](./model.md)): crop demand, its dam's evaporation and its GR4J PE; a
   unit left out of the table, and a dam outside every unit, on the covered

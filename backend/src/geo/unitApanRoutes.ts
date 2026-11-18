@@ -19,12 +19,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
-import { beginSettingsChange, recordModelRevision } from '../history/record.js';
+import { beginSettingsChange, fitReason, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings, patchSettings } from '../projects/settings.js';
-import { citeEvaporation, evaporationLabel } from './evaporation.js';
+import { citeEvaporation, evaporationLabel, referenceEvaporation } from './evaporation.js';
 import { unitApanProposal, UNIT_APAN_METHOD } from './unitApan.js';
 
 const UseBody = z.object({ dataset: z.string().trim().min(1).max(50) }).strict();
@@ -54,8 +54,10 @@ export const unitApanRoutes = new Hono<AuthEnv>()
 			const d = p.dataset;
 			if (!d) throw new ApiError(400, `No A-pan grid “${body.dataset}” is loaded.`, { code: 'dataset_unknown' });
 			if (!p.units.length) throw new ApiError(400, `${d.label} covers none of the units with an outline, so there is no unit A-pan to use.`, { code: 'nothing_covered' });
-			const cite = citeEvaporation({ dataset: d.label, source: d.source, version: d.version, firstYear: d.firstYear, lastYear: d.lastYear });
-			const source = `${cite}; ${UNIT_APAN_METHOD}`.slice(0, APAN_UNITS_SOURCE_MAX);
+			const named = { dataset: d.label, kind: 'apan' as const, source: d.source, version: d.version, firstYear: d.firstYear, lastYear: d.lastYear };
+			// The full citation when it fits the settings' source, else the dataset's reference (issue #763), never a cut-off citation.
+			const cited = `${citeEvaporation(named)}; ${UNIT_APAN_METHOD}`;
+			const source = cited.length <= APAN_UNITS_SOURCE_MAX ? cited : `${referenceEvaporation(named)}; ${UNIT_APAN_METHOD}`.slice(0, APAN_UNITS_SOURCE_MAX);
 			const apanUnits = { dataset: d.label, source, units: Object.fromEntries(p.units.map((u) => [u.nodeId, u.monthlyMm])) };
 			const settings = patchSettings(stored, { apanBasis: 'units', apanUnits });
 			await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(settings)]);
@@ -63,7 +65,11 @@ export const unitApanRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'settings_patch',
 				before,
-				reason: `A-pan for each hydrological unit (CCWR A-pan (Hydrological Unit)): ${p.units.length} unit${p.units.length === 1 ? '' : 's'} from ${evaporationLabel({ kind: 'apan', source: d.source })}, ${UNIT_APAN_METHOD}${left.length ? `; on the covered units’ area-weighted mean: ${left.join(', ')}` : ''}; ${cite}`.slice(0, 500)
+				// The dataset's reference last and always whole; the unit names before it are what gets shortened (issue #763).
+				reason: fitReason(
+					`A-pan for each hydrological unit (CCWR A-pan (Hydrological Unit)): ${p.units.length} unit${p.units.length === 1 ? '' : 's'} from ${evaporationLabel({ kind: 'apan', source: d.source })}, ${UNIT_APAN_METHOD}${left.length ? `; on the covered units’ area-weighted mean: ${left.join(', ')}` : ''}`,
+					`; ${referenceEvaporation(named)}`
+				)
 			});
 			return c.json({ dataset: d.label, units: p.units.map((u) => ({ nodeId: u.nodeId, monthlyMm: u.monthlyMm })), source, revisionId: revision?.id ?? null });
 		});

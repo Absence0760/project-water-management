@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
-import { judgedBy, rightChoices, rightRun } from './ewrMonths';
+import { baseRerunText, judgedBy, rightChoices, rightRun } from './ewrMonths';
 
 const run = (id: string, createdAt: string) => ({ id, createdAt });
 const months = { months: 12, met: 9, rate: 0.75 } as unknown as RunSummary['ewrDailyMonths'];
@@ -38,5 +38,15 @@ describe('judgedBy: which daily EWR the two sides are judged by', () => {
 		expect(judgedBy(judged('tab', false), judged('pragmatic'))).toEqual({ same: true, name: 'the pragmatic EWR' });
 		expect(judgedBy(judged('tab', false), judged('pragmatic', false))).toBeNull();
 		expect(judgedBy(null, null)).toBeNull();
+	});
+});
+
+describe('baseRerunText', () => {
+	it('says a re-run alone never moves the base: then rebase, or that an editor can', () => {
+		expect(baseRerunText(true)).toBe(
+			'This base run was made before the months for the daily EWR were kept, and a scenario stays on its base run: run the model again, then rebase this scenario onto the new run.'
+		);
+		expect(baseRerunText(false)).toMatch(/: they show here once an editor rebases this scenario onto a newer run of the model\.$/);
+		expect(baseRerunText(false)).not.toMatch(/run the model again/);
 	});
 });

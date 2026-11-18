@@ -268,7 +268,8 @@ describe('the fit plan (dependency order)', () => {
 
 // A runnable chain: U1 (40 km²) → G1 → G2 → O; U2 (50) and U4 (20) → G2; U3 (120) → O. Records at G1, G2 and O.
 const START = '1990-10-01';
-const DAYS = Math.round(5 * 365.25);
+// Three years: the first is GR4J's warm-up, so two are scored (issue #772 cut it from five, for the stepwise fits' cost).
+const DAYS = Math.round(3 * 365.25);
 const T1: Gr4jParams = { x1: 900, x2: 0, x3: 220, x4: 3.1 };
 const T2: Gr4jParams = { x1: 450, x2: 0, x3: 110, x4: 2.0 };
 const T3: Gr4jParams = { x1: 220, x2: 0, x3: 50, x4: 1.3 };
@@ -339,9 +340,12 @@ const close = (got: Record<string, number>, truth: Gr4jParams) => {
 const slow = Number(process.env.COVERAGE_SLOWDOWN ?? 1);
 
 describe('the stepwise fit at every gauge (issue #659)', () => {
-	// Twelve fits (two starts of three steps, twice): ~55–120 s alone, ~500 s under CI's coverage. A hang guard, not a budget.
-	it('option 1 recovers each gauge’s true parameters in a three-gauge chain; option 2 borrows and still recovers them', { timeout: 240_000 * slow }, () => {
-		const opts = { budget: 1500, starts: 2, validate: false, seed: 3 } as const;
+	// The recovery fits' options, the same for both options' tests (and so the same fits as before issue #772 split them).
+	const opts = { budget: 1500, starts: 2, validate: false, seed: 3 } as const;
+
+	// Each of the next two tests carries one stepwise fit (two starts of three steps, six fits) on the three-year record: ~30–35 s alone.
+	// Issue #772 split them and cut the record from five years, since both in one test ran ~110 s alone and timed out under a full local `pnpm test`. A hang guard, not a budget.
+	it('option 1 recovers each gauge’s true parameters in a three-gauge chain', { timeout: 240_000 * slow }, () => {
 		const one = calibrateStepwise(chain(false), opts);
 		expect(one.steps.map((s) => [s.zoneNodeId, s.units])).toEqual([
 			['G1', ['U1']],
@@ -354,17 +358,27 @@ describe('the stepwise fit at every gauge (issue #659)', () => {
 		}
 		// Each location on its own window: the middle weir's starts a year in.
 		expect(one.steps[1]!.report.fit.start >= '1991-10-01').toBe(true);
+	});
 
-		// Option 2: U4, beside the upper weir, takes its parameters. The upper weir is still fitted first, and its fit is
-		// the same to the bit (U4's flow never reaches it); the middle weir still recovers its own units' parameters.
+	it('option 2: a unit borrows the upper weir’s parameters, whose fit is the same to the bit, and the rest still recover theirs', { timeout: 240_000 * slow }, () => {
+		// U4, beside the upper weir, takes its parameters. The upper weir is still fitted first, and its fit is the same
+		// to the bit as option 1's (U4's flow never reaches it): every objective value along a seeded search must match
+		// for the two to agree, so a short search shows it without option 1's whole recovery fit.
+		const short = { ...opts, budget: 50 };
+		const ref = calibrateStepwise(chain(false), short);
+		const bor = calibrateStepwise(chain(true), short);
+		expect(bor.steps[0]!.report.params).toEqual(ref.steps[0]!.report.params);
+		expect(bor.steps[0]!.report.fit.scores).toEqual(ref.steps[0]!.report.fit.scores);
+
+		// The middle weir and the outlet still recover their own units' parameters.
 		const two = calibrateStepwise(chain(true), opts);
 		expect(two.steps.map((s) => [s.zoneNodeId, s.units, s.borrowed])).toEqual([
 			['G1', ['U1', 'U4'], ['U4']],
 			['G2', ['U2'], []],
 			[null, ['U3'], []]
 		]);
-		expect(two.steps[0]!.report.params).toEqual(one.steps[0]!.report.params);
 		expect(two.steps[0]!.report.zoneBorrowed).toEqual(['U4']);
+		close(two.steps[0]!.report.params, T1);
 		close(two.steps[1]!.report.params, T2);
 		close(two.steps[2]!.report.params, T3);
 		// Applied as one: each gauge's row, the outlet's into settings.gr4j.

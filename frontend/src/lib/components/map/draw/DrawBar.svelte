@@ -61,7 +61,12 @@
 		/** Tracing: the share of observations (%) a cell must be water in. */
 		minOccurrence?: MinOccurrence;
 	} = $props();
-	const mapReady = $derived(mapStatus === 'ready');
+	/**
+	 * Nothing above the buttons waits for the map to draw: a row added there as it drew (the lines' key, Snap to
+	 * features) moved Enter coordinates under a press already on it, so the release missed it and no click came
+	 * (issue #719). The rows that read the map show while it loads too, and go only when it can't be drawn.
+	 */
+	const mapUsable = $derived(mapStatus !== 'failed');
 
 	const uid = $props.id();
 	const split = $derived(draft.splitResult);
@@ -69,7 +74,7 @@
 		split && 'problem' in split ? split.problem : draft.whole ? null : draft.phase === 'review' || draft.shape === 'point' ? draftProblem(draft.shape, draft.coords) : null
 	);
 	/** Snapping applies to every drawing but a measurement (which has no bar) and a pasted shape of several parts. */
-	const canSnap = $derived(!draft.whole && mapReady && !tracing && draft.snapTargets.length > 0);
+	const canSnap = $derived(!draft.whole && mapUsable && !tracing && draft.snapTargets.length > 0);
 	const canFollow = $derived(draft.mode === 'draw' && draft.shape !== 'point' && draft.phase === 'drawing');
 	const editing = $derived(draft.mode === 'edit');
 	const name = $derived(draft.feature ? draft.feature.name || KIND_LABEL[draft.feature.kind] : '');
@@ -175,7 +180,7 @@
 		{/if}
 	</div>
 	<p class="how small" data-testid="map-draw-how">{howTo}</p>
-	{#if delineating && lines?.length && mapReady}<div class="row-full"><DelineationLines {lines} /></div>{/if}
+	{#if delineating && lines?.length && mapUsable}<div class="row-full"><DelineationLines {lines} /></div>{/if}
 	<p class="said small muted" role="status" data-testid="map-draw-said">{draft.said}</p>
 	{#if draft.traced}
 		<p class="small row-full" data-testid="map-trace-source">

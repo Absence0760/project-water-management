@@ -145,6 +145,8 @@ function touches(model: ProjectModel, ops: readonly ScenarioOp[], index: number)
 			// Engine ≥ 1.72.0: a unit's efficiency puts every planting on the unit on that system, a planting another
 			// scenario adds there included (or not, in the other order): every planting on the unit.
 			if (op.field === 'irrigationEfficiency') w(`cropArea:${op.nodeId}|*`);
+			// Engine 1.118.0: another unit's dam its crops draw on depends on that unit (and its dam).
+			if (op.field === 'cropRemoteNodeId' && typeof op.value === 'string') u(node(op.value));
 			break;
 		case 'node.add':
 			w(node(op.node.id));

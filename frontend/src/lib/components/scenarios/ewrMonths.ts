@@ -43,3 +43,15 @@ export function judgedBy(base: Judged | null, right: Judged | null): { same: tru
 	if (!a || !b || a === b) return { same: true, name: (a ?? b)! };
 	return { same: false, text: `The two runs are judged by different daily EWRs: the base by ${a}, the other run by ${b}. Their months met measure different things.` };
 }
+
+/**
+ * The base side's line for a base run made before engine 1.116.0 (no months for the daily EWR), in place of the
+ * EWR page's "Run the model again…": a scenario stays on its base run, so a re-run alone never changes this side.
+ * Where the reader can rebase, the steps follow it (Run the model, then Rebase…); a reader who can't is told who can.
+ */
+export function baseRerunText(canRebase: boolean): string {
+	const why = 'This base run was made before the months for the daily EWR were kept, and a scenario stays on its base run:';
+	return canRebase
+		? `${why} run the model again, then rebase this scenario onto the new run.`
+		: `${why} they show here once an editor rebases this scenario onto a newer run of the model.`;
+}

@@ -7,7 +7,7 @@
 	// the base run is the server's check, shown in the list after saving.
 	import { tick } from 'svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type FutureFactorTable, resolveCatchmentAreaKm2, isSplitTransfer, transferDestinations } from '@water-management/engine';
+	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type TransferSetField, type FutureFactorTable, resolveCatchmentAreaKm2, isSplitTransfer, transferDestinations } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '#lib/nav/unsaved.js';
@@ -16,7 +16,7 @@
 	import { PE_KIND_OPTIONS } from '#lib/components/settings/peInput.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import DemandScheduleFields from '#lib/components/network/DemandScheduleFields.svelte';
-	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, formatValue, nodeChoices, nodeFields, peDraftOf, rescaleText, settingsValue, transferChoices, transferFieldsFor, valueText, type ValueSpec } from './fields';
 	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
 	import { fmtDay, fmtNum, tidyDay } from '#lib/format/number.js';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
@@ -26,7 +26,8 @@
 		onadd,
 		disabled = false,
 		projectId = null,
-		futureClimate = true
+		futureClimate = true,
+		remoteDam = true
 	}: {
 		/** The input a new op meets: the base run with the listed ops applied. */
 		input: ModelInput;
@@ -36,6 +37,8 @@
 		disabled?: boolean;
 		/** Offer Future climate (climate.delta): false for an applicant, who reads no climate factor table. */
 		futureClimate?: boolean;
+		/** Offer another unit's dam for a unit's crops (node.set cropRemoteNodeId, engine 1.118.0): false for an application, which the engine refuses it in. */
+		remoteDam?: boolean;
 	} = $props();
 
 	// climate.delta (engine 1.107.0, issue #621 slice 5) is a pick of model, pathway and window from the project's change
@@ -110,14 +113,23 @@
 			: null
 	);
 	const fieldOptions = $derived.by(() => {
-		if (d.kind === 'node.set') return node ? nodeFields(node.kind).map((f) => ({ value: f.field, label: f.label })) : [];
-		if (d.kind === 'transfer.set') return TRANSFER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
+		if (d.kind === 'node.set') return node ? nodeFields(node.kind, { remoteDam }).map((f) => ({ value: f.field, label: f.label })) : [];
+		if (d.kind === 'transfer.set') return transferFieldsFor(transfer).map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'settings.set') return SETTINGS_FIELDS.map((f) => ({ value: f.path, label: f.label }));
 		if (d.kind === 'crop.set') return CROP_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'landCover.set') return LAND_COVER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'demandObject.set') return DEMAND_OBJECT_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		return [];
 	});
+
+	/**
+	 * A transfer's choice field: only the choices the engine takes on this rule ('' for none), so a share of the
+	 * river's flow isn't offered on a rule from the dam (transferChoices). Null: every choice (any other field).
+	 */
+	const choices = $derived(
+		d.kind === 'transfer.set' && d.field ? transferChoices(input, d.transferId, d.field as TransferSetField, farms.map((n) => n.id)) : null
+	);
+	const offered = (value: string) => choices === null || choices.includes(value);
 
 	/** Start the value at what the field holds now, so a small change is a small edit. */
 	function prefill() {
@@ -276,14 +288,14 @@
 			{/if}
 			{#if s.t === 'enum'}
 				<select id="op-value" bind:value={d.value}>
-					{#if s.nullable}<option value="">{s.nullLabel ?? 'none'}</option>{:else}<option value="" disabled>Pick one</option>{/if}
-					{#each s.options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					{#if s.nullable && offered('')}<option value="">{s.nullLabel ?? 'none'}</option>{:else}<option value="" disabled>Pick one</option>{/if}
+					{#each s.options.filter((o) => offered(o.value)) as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 			{:else if s.t === 'bool'}
 				<select id="op-value" bind:value={d.value}>
 					<option value="" disabled>Pick one</option>
-					<option value="true">Yes</option>
-					<option value="false">No</option>
+					{#if offered('true')}<option value="true">Yes</option>{/if}
+					{#if offered('false')}<option value="false">No</option>{/if}
 				</select>
 			{:else if s.t === 'system'}
 				<select id="op-value" bind:value={d.value}>
@@ -292,8 +304,8 @@
 				</select>
 			{:else if s.t === 'node'}
 				<select id="op-value" bind:value={d.value}>
-					{#if s.nullLabel !== undefined}<option value="">{s.nullLabel.charAt(0).toUpperCase() + s.nullLabel.slice(1)}</option>{:else}<option value="" disabled>Pick a hydrological unit</option>{/if}
-					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+					{#if s.nullLabel !== undefined && offered('')}<option value="">{s.nullLabel.charAt(0).toUpperCase() + s.nullLabel.slice(1)}</option>{:else}<option value="" disabled>Pick a hydrological unit</option>{/if}
+					{#each nodeChoices(s, nodes, d.kind === 'node.set' ? d.nodeId : null).filter((n) => offered(n.id)) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			{:else if s.t === 'curve'}
 				<textarea id="op-value" rows="6" spellcheck="false" aria-describedby="op-curve-h" placeholder={'100, 0, 0\n101, 8000, 4000\n102, 14000, 15000'} bind:value={d.value}></textarea>
@@ -410,6 +422,8 @@
 					value={d.transferId}
 					onchange={(e) => {
 						d.transferId = e.currentTarget.value;
+						// A field the new rule's shape doesn't take is dropped (months or the one maximum rate on a rule with monthly rates).
+						if (d.kind === 'transfer.set' && d.field && !fieldOptions.some((f) => f.value === d.field)) d.field = '';
 						prefill();
 					}}
 				>

@@ -1,6 +1,9 @@
 <script lang="ts">
 	// Dams (issue #17, option A · Outcomes): how full each dam was at the end
-	// of the latest run. A card per dam (% full, band, change over the run's
+	// of a run: the one the header's Run menu picks (`run=<id>`), else the
+	// newest (river.ts pickRiverRun, as EWR and Outputs pick it). A scenario's
+	// run is named as the other pickers name it and says so under the header,
+	// and the dams it added show (its run's own model). A card per dam (% full, band, change over the run's
 	// last 30 days, a storage sparkline of its last year captioned with what
 	// it shows, its first and last day and its low, charts/Sparkline.svelte,
 	// links to its node on
@@ -38,15 +41,18 @@
 	import { runHref } from '#lib/components/overview/attention.js';
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '#lib/components/overview/damLevels.js';
-	import { pickRuns, ranAgo } from '#lib/components/overview/latestRun.js';
+	import { ranAgo } from '#lib/components/overview/latestRun.js';
+	import { pickRiverRun, scenarioRunNote } from '#lib/components/river/river.js';
+	import { runOptionLabel } from '#lib/components/compare/picker.js';
+	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '#lib/components/overview/summaryChart.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
-	import { fmtDay, fmtNum } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, fmtWhen } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { withParam } from '#lib/workspace/overlays.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
 	import { MappedNodes } from '#lib/workspace/mappedNodes.svelte.js';
-	import { changeWords, DAM_CHANGED, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import { changeWords, DAM_CHANGED, damCards, damsRunText, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 	import DamProposalsBox from './DamProposalsBox.svelte';
 	import DamObservedBox from './DamObservedBox.svelte';
 
@@ -76,10 +82,20 @@
 	});
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-	const pick = $derived(pickRuns(runs));
-	const latest = $derived(pick?.latest ?? null);
+	// --- which run: `run=`, else the newest; a picked run is a step in history, the dam pick kept ---
+	const pick = $derived(pickRiverRun(runs, page.url.searchParams.get('run')));
+	/** The run the page shows (named `latest` from before it had a picker: the newest unless `run=` picks another). */
+	const latest = $derived(pick?.run ?? null);
+	// Newest first, for the picker.
+	const ordered = $derived([...(runs ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+	const isNewest = $derived(!!latest && ordered[0]?.id === latest.id);
+	const scenarioNote = $derived(latest ? scenarioRunNote(latest, runs) : null);
+	function chooseRun(id: string) {
+		void goto(withParam(page.url, 'run', id), { reset: false });
+	}
+	const theRun = $derived(isNewest ? 'the latest run' : 'this run');
 
-	// --- the latest run's record (its model and stored series), through the Runs cache ---
+	// --- the shown run's record (its model and stored series), through the Runs cache ---
 	let run = $state.raw<Run | null>(null);
 	let refs = $state.raw<RunSeriesRef[]>([]);
 	let runLoading = $state(false);
@@ -177,12 +193,13 @@
 
 	// --- the cards, the picked dam and the header line ---
 	// The run's own model marks a dam edited since the run (issue #444): its figures are the run's, its head capacity today's.
-	const cards = $derived(damCards(editor.model.nodes, levels, run?.model?.nodes as { id: string }[] | undefined));
+	// A scenario's run is its scenario's model, not an earlier one: nothing on it is "changed since", and a dam it added has a card.
+	const cards = $derived(damCards(editor.model.nodes, levels, run?.model?.nodes as { id: string }[] | undefined, { scenario: !!latest && isScenarioRun(latest) }));
 	const damParam = $derived(page.url.searchParams.get('dam'));
 	const picked = $derived(pickDam(cards, damParam));
 	// A failed run list is not "no run yet": the header says which it is, as the alert below does.
 	const runText = $derived(
-		runs === null ? 'run list couldn’t be loaded' : latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null
+		runs === null ? 'run list couldn’t be loaded' : latest ? damsRunText(latest, isNewest, ranAgo(latest.createdAt)) : null
 	);
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.nowCapacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
@@ -197,7 +214,7 @@
 		if (damsLoading && damsTotal) return `Loading dam levels (${damsDone} of ${damsTotal})…`;
 		if (runLoading || damsLoading) return 'Loading…';
 		if (runError || damsError) return 'Level couldn’t be loaded';
-		return 'Not in the latest run';
+		return isNewest ? 'Not in the latest run' : 'Not in this run';
 	}
 
 	// --- picking a dam: a link (`dam=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
@@ -277,6 +294,15 @@
 
 {#snippet headerContext()}<span data-testid="dams-summary">{summary}</span>{/snippet}
 {#snippet headerActions()}
+	{#if latest && cards.length}
+		<!-- Laid out like the other sections' run pickers (EWR, Outputs): named "Run" itself, as a label round a select would add its option to the name. -->
+		<label class="run-pick">
+			<span class="visually-hidden">Run</span>
+			<select aria-label="Run" value={latest.id} onchange={(e) => chooseRun(e.currentTarget.value)}>
+				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>{/each}
+			</select>
+		</label>
+	{/if}
 	{#if cards.length}<a class="btn" href={withParam(page.url, 'grid', 'nodes')}>Hydrological unit table</a>{/if}
 	{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs &amp; results</a>{/if}
 {/snippet}
@@ -311,6 +337,19 @@
 					No run yet, so the cards show each dam's capacity only. <a href="?tab=runs">Run the model</a> (Runs &amp; results)
 					to see how full each dam gets.
 				{/if}
+			</p>
+		{/if}
+		{#if pick?.gone}
+			<!-- `run=` names a run that's gone (deleted since the link was made): the newest is shown, and said (as EWR). -->
+			<p class="alert alert-info" role="note" data-testid="dams-run-gone">That run no longer exists, so this shows the newest run.</p>
+		{/if}
+		{#if scenarioNote}
+			<!-- A scenario's run (also once its scenario is deleted): which scenario, and its base run one link away (as EWR). -->
+			<p class="scenario-note muted small" data-testid="dams-scenario-note">
+				Scenario run: <strong>{scenarioNote.name}</strong>{#if scenarioNote.base}, against the base run
+					<strong>{scenarioNote.base.label || 'Untitled run'}</strong> ({fmtWhen(scenarioNote.base.createdAt)}){/if}.
+				{#if scenarioNote.base}<a href={withParam(page.url, 'run', scenarioNote.base.id)} data-testid="dams-show-base">Show the base run</a>{/if}
+				{#if scenarioNote.scenarioId}<a href="?tab=scenarios&scenario={encodeURIComponent(scenarioNote.scenarioId)}">Open the scenario</a>{/if}
 			</p>
 		{/if}
 
@@ -378,8 +417,11 @@
 							{/if}
 							<p class="links small">
 								<!-- The dam's inputs (capacity, minimum level, area, curve, release rule) are its node sheet's (ui.md § Network). -->
-								<a href="?tab=network&edit={encodeURIComponent(c.nodeId)}&section=dam" aria-label="{readonly ? 'Dam details' : 'Edit dam'}: {c.name}" data-testid="dam-edit-link">{readonly ? 'Dam details' : 'Edit dam'}</a>
-								<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
+								<!-- Only for a unit in the model now: a dam a scenario added, or one removed since the run, has no node sheet. -->
+								{#if c.inModel}
+									<a href="?tab=network&edit={encodeURIComponent(c.nodeId)}&section=dam" aria-label="{readonly ? 'Dam details' : 'Edit dam'}: {c.name}" data-testid="dam-edit-link">{readonly ? 'Dam details' : 'Edit dam'}</a>
+									<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
+								{/if}
 								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="dam-map-link">Show on map</a>{/if}
 								{#if c.farm}<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>{/if}
 								{#if c.farm}<a href="{withParam(page.url, 'dam', c.nodeId)}#{PROPOSALS_ID}" aria-label="{c.name}: proposals from the register and the map" onclick={(e) => toProposals(e, c.nodeId)}>Proposals</a>{/if}
@@ -400,7 +442,7 @@
 					</div>
 					<LoadState loading={runLoading || damsLoading} error={runError ?? damsError} retry={() => (runError ? runAttempt++ : damsAttempt++)}>
 						{#if !damsTotal}
-							<p class="muted">The latest run stored no dam storage to show.</p>
+							<p class="muted">{isNewest ? 'The latest run' : 'This run'} stored no dam storage to show.</p>
 						{:else if picked?.level && pickedSeries}
 							{@const l = picked.level}
 							<p class="facts small" data-testid="dam-facts">
@@ -419,7 +461,7 @@
 								caption="Dashed: the dam's capacity{picked.minPct > 0 ? ' and its minimum operating level' : ''}."
 							/>
 						{:else}
-							<p class="muted">{picked?.name ?? 'This dam'} isn't in the latest run: add it before the next run, or pick another dam.</p>
+							<p class="muted">{picked?.name ?? 'This dam'} isn't in {theRun}: {isNewest ? 'add it before the next run, or pick another dam' : 'pick another dam, or another run'}.</p>
 						{/if}
 					</LoadState>
 					{#if run && picked}
@@ -471,6 +513,22 @@
 </div>
 
 <style>
+	.run-pick select {
+		max-width: min(34rem, 60vw);
+		min-height: 36px;
+	}
+	/* On a phone the picker is in the header's More actions list, named over its select (workspace/SectionHeader). */
+	@media (max-width: 640px) {
+		.run-pick select {
+			min-height: 44px;
+		}
+	}
+	.scenario-note {
+		margin: 0 0 0.75rem;
+	}
+	.scenario-note a + a {
+		margin-left: 0.75rem;
+	}
 	.dams-page {
 		container: dams-page / inline-size;
 	}

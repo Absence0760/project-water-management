@@ -70,7 +70,9 @@ describe('a PenPan grid, locally', () => {
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.target).toBe('apan');
 		const [{ reason }] = (await asOwner('SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId])) as [{ reason: string }];
-		expect(reason).toMatch(/Modelled Class-A pan \(PenPan\)/);
+		// The reason cites the dataset by its reference (issue #763); its long source, which names "Modelled Class-A
+		// pan (PenPan)", stays on the evaporation_dataset row checked above.
+		expect(reason).toContain(`dataset “${DS}” (${PENPAN.version}, 2020–2020 monthly means; its source and method as the dataset records them, credit at /data-sources)`);
 		expect(reason).toMatch(/not a measured pan/);
 		expect(reason).toMatch(/mm a year of modelled Class-A pan evaporation \(PenPan, not a measured pan\)/);
 		// The provenance row keeps the whole method (the reason is cut at 500 characters).

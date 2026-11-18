@@ -8,7 +8,9 @@
 	above them, or that they differ (ewrMonths.ts judgedBy). One "At" pick (ewr/EwrUnitPick.svelte) judges both
 	sides at the outlet or at one hydrological unit, from the units with an EWR share in either run, so a scenario's
 	effect on the river just below a unit reads against its base (ewr/EwrDailyMonthsAt.svelte; a unit the scenario
-	added says so on the base's side).
+	added says so on the base's side). A base run made before engine 1.116.0 has no months, and re-running the model
+	makes a new run without moving the base: the base side says to run the model, then rebase (both linked, the
+	Rebase… opening the editor's fold through `onrebase`), or, to a reader who can't rebase, that an editor can.
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
@@ -20,7 +22,7 @@
 	import { runOptionLabel, runPickName } from '#lib/components/compare/picker.js';
 	import { detailCache } from '#lib/components/runs/cache.js';
 	import { fmtWhen } from '#lib/format/number.js';
-	import { judgedBy, rightChoices, rightRun } from './ewrMonths';
+	import { baseRerunText, judgedBy, rightChoices, rightRun } from './ewrMonths';
 
 	type Known = Pick<RunMeta, 'id' | 'label' | 'createdAt' | 'fromScenario' | 'scenarioId' | 'scenarioName'> & { summary: RunSummary };
 
@@ -28,7 +30,8 @@
 		projectId,
 		runs,
 		base,
-		latest
+		latest,
+		onrebase
 	}: {
 		projectId: string;
 		/** The project's runs (the page's list), for the right side's Run menu. */
@@ -37,6 +40,12 @@
 		base: Known;
 		/** The scenario's latest run, with its record: the right side's default. */
 		latest: Known;
+		/**
+		 * Opens the scenario editor's rebase fold (ScenarioEditor.svelte), left out where the reader can't rebase. A base
+		 * run made before engine 1.116.0 has no months, and a re-run alone never changes the base side: it says to run
+		 * the model, then rebase, with both steps' links.
+		 */
+		onrebase?: () => void;
 	} = $props();
 
 	const uid = $props.id();
@@ -100,8 +109,10 @@
 		<div class="col" data-testid="scenario-ewr-base">
 			<Lazy load={loadPanel}>
 				{#snippet children(Panel)}
-					<Panel {projectId} runId={base.id} summary={base.summary} {unit} compact level={4} title="Base: {title(base)}">
-						{#snippet missing()}<a href="?tab=runs">Run the model</a>{/snippet}
+					<Panel {projectId} runId={base.id} summary={base.summary} {unit} compact level={4} title="Base: {title(base)}" rerun={baseRerunText(!!onrebase)}>
+						{#snippet missing()}{#if onrebase}<span class="steps" data-testid="scenario-ewr-base-steps"
+									><a href="?tab=runs">Run the model</a>, then <button type="button" class="link-btn" onclick={onrebase}>Rebase…</button></span
+								>{/if}{/snippet}
 					</Panel>
 				{/snippet}
 			</Lazy>
@@ -142,6 +153,19 @@
 	}
 	.col {
 		min-width: 0;
+	}
+	.steps {
+		white-space: nowrap;
+	}
+	.link-btn {
+		background: none;
+		border: 0;
+		padding: 0;
+		min-height: 24px;
+		color: var(--accent);
+		text-decoration: underline;
+		font: inherit;
+		cursor: pointer;
 	}
 	@container ewr-months (min-width: 44rem) {
 		.cols {

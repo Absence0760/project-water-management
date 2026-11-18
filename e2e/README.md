@@ -36,7 +36,9 @@ pnpm -C e2e e2e:list      # list the tests without running them
    two-step codes there (206) and `mfa-reset-mailpit.spec.ts` a reset's
    emails (205); without Mailpit a send fails and is logged (a code send
    answers 503, anything else still succeeds); the first prints mail to its
-   log. Both run with a test-only `APP_ENCRYPTION_KEY` (`support/env.ts`
+   log. Mailpit runs with `MP_SMTP_DISABLE_RDNS` (docker-compose.yml): its
+   reverse DNS lookup of each SMTP client once held a send, and the request
+   waiting on it, past a 5 s wait (issue #731). Both run with a test-only `APP_ENCRYPTION_KEY` (`support/env.ts`
    `E2E_APP_ENCRYPTION_KEY`), so a spec without Mailpit can plant an
    emailed code it knows (`support/db.ts` `plantEmailCode`). The frontend is a **production build**, not
    the Vite dev server: `support/build-site.ts` runs `vite build` with the

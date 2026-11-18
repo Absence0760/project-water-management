@@ -22,7 +22,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
-import { beginModelChange, recordModelRevision } from '../history/record.js';
+import { beginModelChange, fitNotedReason, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
@@ -123,6 +123,12 @@ async function pickDataset(db: Db, wanted: string | undefined): Promise<{ datase
 
 const round = (x: number) => Math.round(x);
 const ha = (m2: number) => `${(m2 / 10_000).toFixed(2)} ha`;
+/**
+ * A planted area's History reason: what was taken, then the dataset's citation (always whole, or its short reference
+ * when the full source would crowd out the rest), then as much of its method as REASON_MAX leaves, cut on a word.
+ */
+export const plantedReason = (head: string, d: Pick<CroplandDataset, 'dataset' | 'source' | 'version'>, method: string) =>
+	fitNotedReason(head, `; ${citeDataset(d)}.`, `; dataset “${d.dataset}” (${d.version}).`, method);
 const typeSummary = (r: CropTypeResult) =>
 	'problem' in r
 		? { problem: r.problem }
@@ -259,7 +265,7 @@ export const croplandRoutes = new Hono<AuthEnv>()
 				if (!(areaM2 > 0)) throw new ApiError(400, `${citeDataset(typeSet)} maps no ${words} in ${what}, so there is no area to use.`);
 				const classes = body.layer === 'orchard' ? typeSet.orchardClasses : typeSet.vineClasses;
 				cited = { ...typeSet, method: `${words[0]!.toUpperCase()}${words.slice(1)} (class ${classes.join(', ')}). ${typeSet.method}`.slice(0, 1000) };
-				reason = `Planted area of ${crop.name} on ${n.name} from crop types: ${ha(areaM2)} of ${words} in ${what}; ${citeDataset(typeSet)}. ${cited.method}`;
+				reason = plantedReason(`Planted area of ${crop.name} on ${n.name} from crop types: ${ha(areaM2)} of ${words} in ${what}`, typeSet, cited.method);
 			} else {
 				const sums = await cultivatedAreas(db, dataset!, parcels.map((p) => p.geometry));
 				const bad = sums.find((s): s is { problem: string } => 'problem' in s);
@@ -268,7 +274,7 @@ export const croplandRoutes = new Hono<AuthEnv>()
 				areaM2 = sums.reduce((s, r) => s + round((r as { cultivatedM2: number }).cultivatedM2), 0);
 				if (!(areaM2 > 0)) throw new ApiError(400, `${citeDataset(dataset!)} maps no cropland in ${what}, so there is no area to use.`);
 				cited = dataset!;
-				reason = `Planted area of ${crop.name} on ${n.name} from land cover: ${ha(areaM2)} cultivated in ${what}; ${citeDataset(dataset!)}. ${dataset!.method}`;
+				reason = plantedReason(`Planted area of ${crop.name} on ${n.name} from land cover: ${ha(areaM2)} cultivated in ${what}`, dataset!, dataset!.method);
 			}
 			const change = await beginModelChange(db, id);
 			await db.query(
@@ -302,7 +308,7 @@ export const croplandRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: reason.slice(0, 500)
+				reason
 			});
 			return c.json({ nodeId, cropId: body.cropId, areaM2, dataset: cited.dataset, ...(body.layer ? { layer: body.layer } : {}), revisionId: revision?.id ?? null });
 		});

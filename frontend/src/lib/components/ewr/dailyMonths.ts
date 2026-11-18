@@ -23,9 +23,9 @@ export function zeroRequirementText(r: Pick<EwrDailyMonths, 'zeroRequirementMont
 }
 
 /** Why a run has no ewrDailyMonths: kept from this reader (a run on the registered volumes), or made before engine 1.116.0. */
-export function dailyMonthsMissing(summary: Pick<RunSummary, 'allocations'>): string {
+export function dailyMonthsMissing(summary: Pick<RunSummary, 'allocations'>, rerun?: string): string {
 	if (verdictsOnly(summary)) return 'This run’s months for the daily EWR are shown to the project’s editors and owners only (it rests on the registered water volumes).';
-	return 'Run the model again to see this for the daily EWR.';
+	return rerun ?? 'Run the model again to see this for the daily EWR.';
 }
 
 /** The share-of-months class the bars and the headline take: all met, most (≥ 80 %), or fewer. */

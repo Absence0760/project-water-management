@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamLevel } from '#lib/components/overview/damLevels.js';
-import { changeWords, damCards, damChange, damChanges, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
+import { changeWords, damCards, damChange, damChanges, damsRunText, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
 
 const level = (nodeId: string, endPct: number, over: Partial<DamLevel> = {}): DamLevel => ({
 	nodeId,
@@ -77,6 +77,36 @@ describe('damCards', () => {
 		const gone = damCards([], [level('a', 60)], runNodes);
 		expect(gone[0]).toMatchObject({ nowCapacityM3: 0, change: { capacity: { run: 140_000, now: 0 } } });
 		expect(gone[0]!.change?.text).toBe('Dam settings changed since the run: dam removed. Re-run to update.');
+		expect(gone[0]!.inModel).toBe(false);
+	});
+
+	it('a scenario’s run: the dam it added has a card as it ran, and nothing is marked changed', () => {
+		// "Hexberg Dam" adds a unit with a dam and enlarges Upper farm's; the run's model is the scenario's.
+		const runNodes = [
+			{ id: 'a', name: 'Upper farm', kind: 'farm', damCapacityM3: 180_000, damMinPct: 0.1 },
+			{ id: 'b', name: 'Lower farm', kind: 'farm', damCapacityM3: 90_000 },
+			{ id: 'h', name: 'Hexberg', kind: 'farm', damCapacityM3: 400_000 }
+		];
+		const levels = [level('h', 30, { name: 'Hexberg', capacityM3: 400_000 }), level('a', 50, { capacityM3: 180_000, name: 'Upper farm' }), level('b', 70, { capacityM3: 90_000, name: 'Lower farm' })];
+		const cards = damCards(nodes, levels, runNodes, { scenario: true });
+		expect(cards.map((c) => [c.nodeId, c.name, c.nowCapacityM3, c.change, c.inModel])).toEqual([
+			['h', 'Hexberg', 400_000, null, false],
+			['a', 'Upper farm', 180_000, null, true],
+			['b', 'Lower farm', 90_000, null, true]
+		]);
+		// The same levels read as a run of the model would call Hexberg removed and Upper farm resized.
+		const asModel = damCards(nodes, levels, runNodes);
+		expect(asModel[0]!.change?.text).toContain('dam removed');
+		expect(asModel[1]!.change?.capacity).toEqual({ run: 180_000, now: 150_000 });
+	});
+});
+
+describe('damsRunText', () => {
+	it('says latest for the newest run, and names a scenario’s run as the pickers do', () => {
+		expect(damsRunText({ label: 'Baseline' }, true, 'today')).toBe('latest run “Baseline”, ran today');
+		expect(damsRunText({ label: 'Baseline' }, false, '3 days ago')).toBe('run “Baseline”, ran 3 days ago');
+		expect(damsRunText({ label: 'Hexberg Dam', scenarioName: 'Hexberg Dam', fromScenario: true }, false, 'today')).toBe('run “Hexberg Dam (scenario)”, ran today');
+		expect(damsRunText({ label: '' }, true, 'today')).toBe('latest run “Untitled run”, ran today');
 	});
 });
 

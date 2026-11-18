@@ -7,6 +7,7 @@
 // Divide's area ticks. The gross area is the default everywhere; the
 // effective one is only ever taken when asked for.
 import { z } from 'zod';
+import { fitList } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 
 export const AreaBasis = z.enum(['gross', 'effective']);
@@ -42,11 +43,15 @@ export function basisText(basis: AreaBasis, nonContributingM2: number | null | u
 
 /**
  * Which of `areas` taken areas were gross and which effective, for a Start or Divide revision reason: " (gross)",
- * " (effective, without what drains into pans)", or " (gross; effective, without what drains into pans: A, B)". Empty with no area. Pure.
+ * " (effective, without what drains into pans)", or " (gross; effective, without what drains into pans: A, B)". Empty with no area.
+ * The names grow with the model, so they are listed only as far as `room` (the note's whole length) allows, the rest
+ * counted ("A, B and 12 more", or "14 areas"), so the reason's citation never has to give way (issue #763). Pure.
  */
-export function areaBasisNote(areas: number, effective: readonly string[]): string {
+export function areaBasisNote(areas: number, effective: readonly string[], room = Infinity): string {
 	if (areas === 0) return '';
 	if (effective.length === 0) return ' (gross)';
 	if (effective.length >= areas) return ' (effective, without what drains into pans)';
-	return ` (gross; effective, without what drains into pans: ${effective.join(', ')})`;
+	const open = ' (gross; effective, without what drains into pans: ';
+	const names = fitList(effective, room - open.length - 1, ', ', (n) => `${n} ${n === 1 ? 'area' : 'areas'}`);
+	return `${open}${names})`;
 }

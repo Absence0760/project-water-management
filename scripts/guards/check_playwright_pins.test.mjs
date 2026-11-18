@@ -160,6 +160,15 @@ test("the repo's docker-compose.yml pins Postgres, Mailpit and MinIO by digest",
 	assert.deepEqual(composeImageProblems(compose, 'docker-compose.yml'), []);
 });
 
+test("the repo's Mailpit answers SMTP without a reverse DNS lookup (issue #731)", () => {
+	// Mailpit holds its greeting until the lookup returns, so a slow resolver stalls every send, and the API
+	// request waiting on it, past an e2e wait (docker-compose.yml's comment).
+	const compose = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docker-compose.yml'), 'utf8');
+	const mailpit = compose.match(/^  mailpit:\n((?: {4,}.*\n|\s*\n)*)/m)?.[1];
+	assert.ok(mailpit, 'docker-compose.yml has a mailpit service');
+	assert.match(mailpit, /^\s+MP_SMTP_DISABLE_RDNS: "true"$/m);
+});
+
 test('a URL tarball in pnpm-lock.yaml must keep its integrity hash', () => {
 	const url = 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz';
 	const pinned = `packages:\n  xlsx@${url}:\n    resolution: {integrity: sha512-oLDq3jw7AcLq==, tarball: ${url}}\n    version: 0.20.3\n`;

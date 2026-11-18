@@ -96,7 +96,10 @@ test('an editor uses the boundary’s reference ET as GR4J’s monthly PE; Histo
 	await expectNoViolations(page, { include: '[data-testid="evaporation-proposal"]' });
 
 	await page.goto(`/projects/${project.id}?tab=history`);
-	await expect(page.getByTestId('history-entry').nth(0)).toContainText(/GR4J’s monthly PE from the map: 1335 mm a year of reference evapotranspiration .*\(synthetic 1, 1991–2020 monthly means; dataset “synthetic”\)\. Pre-summarised at import/);
+	await expect(page.getByTestId('history-entry').nth(0)).toContainText(
+		// The reason cites the dataset by its reference (issue #763); the source and method stay on the dataset's row.
+		/Reason: GR4J’s monthly PE from the map: 1335 mm a year of reference evapotranspiration .*; dataset “synthetic” \(synthetic 1, 1991–2020 monthly means; its source and method as the dataset records them, credit at \/data-sources\)\./
+	);
 
 	// A viewer reads the proposal and has no Use; on a phone nothing scrolls sideways.
 	const viewer = await signIn('Evaporation viewer');

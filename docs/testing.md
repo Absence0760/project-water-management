@@ -229,9 +229,11 @@ own: the example catchments' GR4J fit (`scripts/examples/catchments.test.ts`)
 took about 100 s of its 120 s guard under coverage, and went over it on a
 slower runner (PR #570). The engine does the same
 (`packages/engine/vitest.config.ts`): the stepwise fit at every gauge
-(`calibrate/locations.test.ts`, twelve GR4J fits) takes roughly a minute in CI's
-unit job and about 500 s under coverage, past its 240 s guard until the guard
-scaled. A
+(`calibrate/locations.test.ts`) took roughly a minute in CI's unit job and
+about 500 s under coverage, past its 240 s guard until the guard scaled; it
+then ran 96–127 s alone and timed out under a full local `pnpm test`, so issue
+#772 split it into one test per option (six GR4J fits each) on a three-year
+record instead of five: about 35 s each alone. A
 test that records what its requests do keeps the record per request
 (`role-ladder.db.test.ts` carries it in an `AsyncLocalStorage`), so a request
 still running after its test ends can't fail the next one.

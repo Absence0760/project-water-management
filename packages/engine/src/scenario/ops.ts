@@ -280,8 +280,10 @@ const CROP_SOURCE = ['cropWaterSource', 'cropRiverPumpM3Day', 'cropRiverPoolM3']
  * §2.7k): the shares of its crop demand asked of its dam, the river and
  * another unit's dam, and the pipe from that dam. Set them in consecutive
  * ops, which are checked together, so the shares can add up to 100 % again.
- * Which unit's dam is the model's own (`cropRemoteNodeId` names another
- * node, which an applicant's view may hide), not a scenario's.
+ * Which unit's dam supplies the remote share, `cropRemoteNodeId` (engine
+ * 1.118.0), is settable too, in a team scenario only: applyScenario checks
+ * the named unit has a dam in the scenario's model as the earlier ops leave
+ * it, and refuses it in an application (overrides.ts).
  */
 const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day'] as const;
 /**
@@ -305,7 +307,7 @@ const BASEFLOW = ['baseflowLossM3Day', 'baseflowGainM3Day', 'baseflowLossMonthly
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY, ...REACH, ...BASEFLOW],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY, 'cropRemoteNodeId', ...REACH, ...BASEFLOW],
 	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES, ...REACH],
 	gauge: ['name', 'ewrSite', ...REACH]
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -371,6 +373,8 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	cropShareRiver: nullable(frac),
 	cropShareRemote: nullable(frac),
 	cropRemoteCapM3Day: nullable(nonNeg),
+	// Which unit's dam (engine 1.118.0): an id, or null for none; that it names another unit with a dam is applyScenario's check.
+	cropRemoteNodeId: nullable(id),
 	reachLossFrac: range(0, REACH_LOSS_FRAC_MAX),
 	reachLossMaxM3Day: nullable(nonNeg),
 	reachLossFracMonthly: nullable(monthlyOf(range(0, REACH_LOSS_FRAC_MAX))),
@@ -1266,9 +1270,9 @@ const NODE_FIELDS: Record<string, Check> = {
 	// A new farm or user may bring its GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for its groundwater.
 	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
 	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`)),
-	// The unit whose dam supplies a crop supply table's remote share (engine ≥ 1.73.0) is the model's, never a scenario's
-	// (it names another node, which an applicant's view may hide): a new node carries none.
-	cropRemoteNodeId: (v) => (v === null || v === undefined ? null : 'is set in the model, not by a scenario')
+	// A new node names no other unit's dam (engine ≥ 1.73.0): a node.set after it does (engine 1.118.0), where
+	// applyScenario checks the unit named has a dam then.
+	cropRemoteNodeId: (v) => (v === null || v === undefined ? null : 'is set by a node.set op once the hydrological unit is added')
 };
 /**
  * The field engine 0.16.0–1.70.0 scenarios set a farm's return flow by: β, a

@@ -26,7 +26,8 @@ import { DelineationRefused, type WindowAim } from './delineate.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { loadPlanRequest, queuePlan, waitingPlanRequest, type PlanRequest } from './planRequests.js';
 import { delineationLimits, jobWindowsFrom, nextJobWindow } from './requests.js';
-import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
+import { AreaBasis, takenAreaM2 } from './areaBasis.js';
+import { startReason } from './reasons.js';
 import { delineateUnits, START_METHOD_VERSION, type Subcatchments } from './subcatchments.js';
 import {
 	ApplyBody,
@@ -303,7 +304,7 @@ export const startRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Started from the map: ${nodes.length} hydrological units; ${areas} ${areas === 1 ? 'area' : 'areas'}${areaBasisNote(areas, effective)} and ${orders} drains-into from ${p.dataset ? `${p.dataset}, ${p.method_version}` : 'the points as placed'}`.slice(0, 500)
+				reason: startReason({ units: nodes.length, areas, effective, orders, dataset: p.dataset || null, methodVersion: p.method_version })
 			});
 			const decision: StartDecision = {
 				outlet: { name: outlet.name, nodeId: outlet.id },
