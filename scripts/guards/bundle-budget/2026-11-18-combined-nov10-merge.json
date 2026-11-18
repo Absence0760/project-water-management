@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #780 after merging main @ 3d0877286: the scenario rebase hint, field checks and EWR months (frontend/src/lib/components/scenarios/) on top of the Dams run picker's +1 KB entry. Measured locally: main 2506 KB, this branch 2508 KB (+2 KB in all, +1 here)."
+}
