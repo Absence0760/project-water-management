@@ -5,6 +5,7 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
+	import { tick } from 'svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type FutureFactorTable, resolveCatchmentAreaKm2, isSplitTransfer, transferDestinations } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
@@ -138,6 +139,20 @@
 	function pickKind(kind: ScenarioOpName) {
 		d = emptyDraft(kind);
 		error = null;
+	}
+	/**
+	 * Start a node.set on this unit's field, prefilled from what it holds now,
+	 * and focus the value (the Yield panel's "Set its dam capacity in this
+	 * scenario"). Replaces whatever was half filled in.
+	 */
+	export async function startChange(nodeId: string, field: string) {
+		d = { ...emptyDraft('node.set'), nodeId, field };
+		error = null;
+		prefill();
+		await tick();
+		const el = document.getElementById('op-value');
+		el?.scrollIntoView({ block: 'center' });
+		el?.focus();
 	}
 	function pickNode(id: string) {
 		d.nodeId = id;

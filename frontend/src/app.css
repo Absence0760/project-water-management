@@ -665,11 +665,14 @@ textarea {
    shadow on the side that has more, drawn by CSS alone. Two covers in the surface's colour scroll with the
    content (`local`) and sit on its two ends; two shadows stay on the box's edges (`scroll`). At an end, its cover
    lies over that edge's shadow; with nothing to scroll, both covers hide both shadows. */
+/* A page that pins a bar at the window's foot over its tables lowers the cap with --table-wrap-max (inherited), so
+   a scroll position always shows the whole box, its sideways scrollbar and last row included, above the bar
+   (scenario override mode's "Edits to record", scenarios/OverrideEditor.svelte). */
 .table-wrap {
 	--scroll-shade: color-mix(in srgb, var(--text) 22%, transparent);
 	position: relative;
 	overflow: auto;
-	max-height: 70vh;
+	max-height: var(--table-wrap-max, 70vh);
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	background:
@@ -691,11 +694,14 @@ table.data td {
 	vertical-align: middle;
 }
 /* The whole header sticks, not each cell, so a two-row header (a group row
-   over the column names) stays stacked instead of both rows sitting at top 0. */
+   over the column names) stays stacked instead of both rows sitting at top 0.
+   Above a body row's sticky name or action cell (z-index 1 or 2, pinned left or
+   right): at an equal 2 the rows after it painted over the header as the table
+   scrolled down in its box (the node table, 2026-11-09). */
 table.data thead {
 	position: sticky;
 	top: 0;
-	z-index: 2;
+	z-index: 3;
 }
 table.data thead th {
 	background: var(--surface-2);

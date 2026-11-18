@@ -6,6 +6,7 @@
 // reads, before the threshold) and the input. The fuzz generator's networks
 // get, on top, a daily A-pan record, demand factors (unit and crops part)
 // and a demand-factor start date in some seeds. Synthetic data only.
+import { runApanRows } from '../evaporation/apanUnits';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_IRRIGATION_SYSTEMS, type DailySeries, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { runModelWithoutChecks } from '../run';
@@ -51,7 +52,11 @@ function reference(input: ModelInput, out: ModelOutput, n: NetworkNode): Ref | n
 	const s = input.settings;
 	const feb = num(s.februaryDays, 28.25);
 	const dim = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
-	const apan = Array.from({ length: 12 }, (_, m) => num((s.apanMm as unknown as number[] | undefined)?.[m], 0));
+	// Each unit's own A-pan under CCWR A-pan (Hydrological Unit) (engine ≥ 1.117.0, §2.3b): its row, else the covered
+	// units' area-weighted row; the daily record isn't read then.
+	const rows = runApanRows(s, input.model.nodes);
+	const unitRow = rows.apanUnits ? (rows.apanUnits.units[n.id] ?? rows.apanMm) : null;
+	const apan = Array.from({ length: 12 }, (_, m) => num(unitRow ? unitRow[m] : (s.apanMm as unknown as number[] | undefined)?.[m], 0));
 	const thr = num((s.calibration as { rainThresholdMm?: number } | undefined)?.rainThresholdMm, 2);
 	const erM = s.effectiveRainFractionMonthly as number[] | null | undefined;
 	const erMonthly = Array.isArray(erM) && erM.length === 12 && erM.every((x) => typeof x === 'number' && x >= 0 && x <= 1) ? erM : null;
@@ -66,7 +71,7 @@ function reference(input: ModelInput, out: ModelOutput, n: NetworkNode): Ref | n
 	const d0 = epoch(out.startDate);
 	const days = out.days;
 	const rainFinal = out.series.find((x) => x.nodeId === null && x.key === 'rain_final')?.values;
-	const ap = input.series.evap_apan_mm;
+	const ap = unitRow ? undefined : input.series.evap_apan_mm;
 	const apOff = ap ? d0 - epoch(ap.startDate) : 0;
 	// Demand factor (unit × crops part) from demandFactorFrom; nothing before the abstraction date.
 	const okRow = (r: unknown): number[] | null => (Array.isArray(r) ? Array.from({ length: 12 }, (_, m) => (typeof r[m] === 'number' && Number.isFinite(r[m]) && r[m] >= 0 ? r[m] : 1)) : null);

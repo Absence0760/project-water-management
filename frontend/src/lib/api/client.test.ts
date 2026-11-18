@@ -940,6 +940,9 @@ describe('jobs and yield client', () => {
 		const jobs = mockFetch(200, { jobs: [{ id: 'j' }] });
 		expect(await createApi('', jobs).yield.jobs('p', { nodeId: 'n', runId: 'r' })).toEqual([{ id: 'j' }]);
 		expect(call(jobs).url).toBe('/projects/p/yield/jobs?nodeId=n&runId=r');
+		const options = mockFetch(200, { damCapacityM3: 0, pctRunoffToDam: 1, pctUpstreamToDam: 0, units: [] });
+		expect((await createApi('', options).yield.options('p', { nodeId: 'n', scenarioId: 's' })).damCapacityM3).toBe(0);
+		expect(call(options)).toEqual({ url: '/projects/p/yield/options?nodeId=n&scenarioId=s', method: 'GET', body: undefined });
 
 		const cancel = mockFetch(200, { status: 'dead', cancelled: true });
 		expect(await createApi('', cancel).yield.cancel('p', 'j/1')).toEqual({ status: 'dead', cancelled: true });

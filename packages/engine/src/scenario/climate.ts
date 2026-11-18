@@ -192,6 +192,17 @@ export function applyClimateDelta(d: ModelInput, op: Pick<ClimateDeltaOp, 'rainF
 		st.apanMm = (st.apanMm as number[]).map((v, wy) => (typeof v === 'number' ? v * ef[calOfWy(wy)]! : v));
 		rows.push('the A-pan row');
 	}
+	// The A-pan per hydro unit (engine ≥ 1.117.0): each unit's row by the same factors.
+	const units = st.apanUnits as { units?: Record<string, unknown> } | null | undefined;
+	if (units && typeof units === 'object' && units.units && typeof units.units === 'object' && !Array.isArray(units.units)) {
+		st.apanUnits = {
+			...units,
+			units: Object.fromEntries(
+				Object.entries(units.units).map(([id, row]) => [id, Array.isArray(row) && row.length === 12 ? row.map((v, wy) => (typeof v === 'number' ? v * ef[calOfWy(wy)]! : v)) : row])
+			)
+		};
+		rows.push('the A-pan per hydro unit');
+	}
 	const pe = st.pe as PeInput | undefined;
 	if (pe && pe.kind === 'monthly' && Array.isArray(pe.mm)) {
 		st.pe = { ...pe, mm: pe.mm.map((v, wy) => (typeof v === 'number' ? v * ef[calOfWy(wy)]! : v)) };

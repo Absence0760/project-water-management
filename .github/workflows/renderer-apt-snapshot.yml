@@ -16,7 +16,7 @@ name: Renderer apt snapshot age
 
 on:
   schedule:
-    # 06:00 UTC Monday, the same weekly tide as audit.yml and gitleaks-sweep.yml.
+    # 06:00 UTC Monday, the same weekly tide as audit.yml and secret-scan-sweep.yml.
     - cron: '0 6 * * 1'
   # A merged bump closes the issue without waiting for Monday.
   push:

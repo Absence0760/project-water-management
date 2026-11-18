@@ -72,9 +72,10 @@ beforeAll(async () => {
 
 describe('a run whose scenario was deleted', () => {
 	it('is listed as a scenario run (fromScenario), with the name it recorded; its base is a run of the model', async () => {
-		const runs = (await owner.call('GET', `/projects/${pid}/runs`)).body.runs as { id: string; scenarioId: string | null; scenarioName: string | null; fromScenario: boolean }[];
-		expect(runs.find((r) => r.id === orphan)).toMatchObject({ scenarioId: null, scenarioName: 'Twice the demand', fromScenario: true });
-		expect(runs.find((r) => r.id === base)).toMatchObject({ scenarioId: null, scenarioName: null, fromScenario: false });
+		const runs = (await owner.call('GET', `/projects/${pid}/runs`)).body.runs as { id: string; scenarioId: string | null; scenarioName: string | null; fromScenario: boolean; scenarioBaseRunId: string | null }[];
+		// scenarioBaseRunId: the base its snapshot recorded, which the EWR page's scenario note links to.
+		expect(runs.find((r) => r.id === orphan)).toMatchObject({ scenarioId: null, scenarioName: 'Twice the demand', fromScenario: true, scenarioBaseRunId: base });
+		expect(runs.find((r) => r.id === base)).toMatchObject({ scenarioId: null, scenarioName: null, fromScenario: false, scenarioBaseRunId: null });
 		expect((await owner.call('GET', `/projects/${pid}/runs/${orphan}`)).body.run).toMatchObject({ fromScenario: true });
 	});
 

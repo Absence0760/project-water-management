@@ -29,6 +29,16 @@ describe('SettingsDraft', () => {
 		expect(d.kept).toEqual({});
 	});
 
+	it('dirtyBesides leaves the named keys out: picking CCWR A-pan (Hydrological Unit) alone doesn’t hold its Use back', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		d.s.apanBasis = 'units';
+		expect(d.dirty).toBe(true);
+		expect(d.dirtyBesides('apanBasis')).toBe(false);
+		d.s.apanMm[0] = 123;
+		expect(d.dirtyBesides('apanBasis')).toBe(true);
+	});
+
 	it('adopts another shape of the same settings on the saved copy and the form alike, so it isn’t an edit (issue #659)', () => {
 		const d = new SettingsDraft();
 		d.load(saved());

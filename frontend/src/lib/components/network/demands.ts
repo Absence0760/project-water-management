@@ -5,6 +5,7 @@
 // other water user. Monthly m³/day from the engine's own helpers
 // (objectMonthlyM3Day, farmDemands), so a row reads what a run takes before
 // rain, schedules, demand factors and restrictions.
+import type { ApanInput } from '#lib/model/systems.js';
 import {
 	daysPerMonth,
 	DEMAND_OBJECT_CATEGORY_LABEL,
@@ -91,7 +92,7 @@ function objectSizing(o: DemandObject): string | null {
  * Every demand in the catchment, in the network's node order; within a unit,
  * its supply order (the crops at their place among the objects).
  */
-export function demandRows(model: ProjectModel, apanMm: readonly number[], februaryDays = 28.25): DemandRow[] {
+export function demandRows(model: ProjectModel, apanMm: ApanInput, februaryDays = 28.25): DemandRow[] {
 	const byId = new Map(model.nodes.map((n) => [n.id, n]));
 	const objectsOf = new Map<string, DemandObject[]>();
 	for (const o of model.demandObjects ?? []) {

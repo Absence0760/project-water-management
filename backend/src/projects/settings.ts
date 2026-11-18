@@ -1,5 +1,10 @@
 import {
 	ACCUMULATION_MODES,
+	APAN_BASES,
+	APAN_UNITS_MAX,
+	APAN_UNIT_MONTH_MAX,
+	APAN_UNITS_SOURCE_MAX,
+	apanUnitsError,
 	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
 	CALIBRATION_BOUNDS,
@@ -220,6 +225,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	if (isObj(s.unitRain) && isObj(s.unitRain.chirpsUnits)) {
 		s.unitRain = { ...s.unitRain, chirpsUnits: Object.fromEntries(Object.entries(s.unitRain.chirpsUnits).map(([id, c]) => [ids.get(id) ?? id, c])) };
 	}
+	// Each unit's own A-pan (engine ≥ 1.117.0): keyed by node id.
+	if (isObj(s.apanUnits) && isObj(s.apanUnits.units)) {
+		s.apanUnits = { ...s.apanUnits, units: Object.fromEntries(Object.entries(s.apanUnits.units).map(([id, row]) => [ids.get(id) ?? id, row])) };
+	}
 	// The rainfall stations' units (issue #553): the units given a station and the unit each station stands in.
 	if (isObj(s.rainStations)) s.rainStations = remapRainStations(s.rainStations, ids);
 	// The headline location's pointer (engine ≥ 1.41.0 the calibration site; since 1.110.0, issue #659, the headline).
@@ -292,7 +301,7 @@ function remapFitRecordNodes(r: Json, ids: ReadonlyMap<string, string>): Json {
  * And the units' Parameters from (issue #659): a unit left out takes its own
  * zone's.
  */
-export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'unitParamsFrom', 'referenceGauge']);
+export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['apanUnits', 'fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'unitParamsFrom', 'referenceGauge']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -758,6 +767,25 @@ const ArealRain = z
 		source: z.string().trim().min(1, 'an areal rainfall correction needs its source').max(PE_SOURCE_MAX)
 	})
 	.strict();
+
+/**
+ * settings.apanUnits (engine ≥ 1.117.0, docs/model.md §2.3b): each land unit's
+ * 12 monthly A-pan from one A-pan grid, its dataset label and its source line.
+ * The engine's apanUnitsError applies the same rules to a stored value.
+ */
+export const ApanUnits = z
+	.object({
+		dataset: z.string().trim().min(1).max(50),
+		source: z.string().trim().min(1).max(APAN_UNITS_SOURCE_MAX),
+		units: z
+			.record(z.string().uuid('a land unit is named by its node id'), z.array(z.number().finite().min(0).max(APAN_UNIT_MONTH_MAX)).length(12))
+			.refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= APAN_UNITS_MAX, `from 1 to ${APAN_UNITS_MAX} units`)
+	})
+	.strict()
+	.superRefine((v, ctx) => {
+		const err = apanUnitsError(v);
+		if (err) ctx.addIssue({ code: 'custom', message: err });
+	});
 
 /**
  * settings.unitRain (issue #482, docs/model.md §2.4h): each land unit runs
@@ -1235,6 +1263,12 @@ export const FitRecord = z
 						if (err) ctx.addIssue({ code: 'custom', message: `share rain fingerprint: ${err}` });
 					})
 					.optional(),
+				// Engine ≥ 1.117.0: each unit's own A-pan the fit ran on (CCWR A-pan (Hydrological Unit)), recorded only then.
+				apanUnits: z
+					.object({ dataset: z.string().max(50), units: z.record(z.string().max(200), z.array(z.number().finite().min(0).max(APAN_UNIT_MONTH_MAX)).length(12)) })
+					.strict()
+					.nullable()
+					.optional(),
 				// Engine ≥ 1.91.0 (issue #553): the catchment's rainfall station, recorded only with one. Optional, as above.
 				catchmentStation: z
 					.unknown()
@@ -1359,6 +1393,12 @@ export const SettingsPatch = z
 		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
 		apanMm: monthlyNonNeg,
+		// What each unit's A-pan runs on (engine ≥ 1.117.0): Model settings → Demand → A-pan from "CCWR A-pan (Hydrological
+		// Unit)" is 'units', every other source the catchment row; null = the catchment row.
+		apanBasis: z.enum(APAN_BASES).nullable(),
+		// Each land unit's own 12 monthly A-pan from the CCWR A-pan grid (engine ≥ 1.117.0), written by POST …/map/unit-apan
+		// (geo/unitApanRoutes.ts) and kept when the basis goes back to the catchment row; replaced whole, null = none.
+		apanUnits: ApanUnits.nullable(),
 		// ewrSplit (engine 1.94.0 – 1.104.x, issue #615), flowShareMethod and hiLoSplit (issue #616) are retired: not here,
 		// so an older web build's patch with them still saves, the keys stripped like any other unknown one.
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.

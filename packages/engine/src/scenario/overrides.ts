@@ -39,6 +39,7 @@ import {
 } from './ops';
 import { structureIssues } from './structure';
 import { applyClimateDelta, climateFactorRowError } from './climate';
+import { resolveApanUnits, scaleApanUnits } from '../evaporation/apanUnits';
 import { modelFarmEfficiency } from '../demand';
 import { resolveDamCurve } from '../network/dam';
 import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
@@ -845,6 +846,19 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			// row's, as the run scores and the ensemble varies it. Settings from before keep the top level, which
 			// normalizeCalibrationLocations copies into that row when the run reads them.
 			if (writeHeadlineRow(d, path, value)) break;
+			// Under the A-pan per hydro unit (engine ≥ 1.117.0) the A-pan row isn't read: a new row scales every unit's own
+			// by the factor it puts on the catchment row, so the scenario's evaporation reaches each unit.
+			if (path === 'apanMm') {
+				const per = resolveApanUnits(s, m.nodes, false, []);
+				if (per) {
+					const scaled = scaleApanUnits(per.setting, per.catchmentMm, value as number[]);
+					if ('problem' in scaled) fail(`apanMm: ${scaled.problem}`);
+					else {
+						s.apanUnits = scaled.setting;
+						notes.push(`the A-pan per hydro unit: every unit’s row scaled by the change to the catchment row (${Object.keys(scaled.setting.units).length} unit${Object.keys(scaled.setting.units).length === 1 ? '' : 's'})`);
+					}
+				}
+			}
 			if (leaf === undefined) s[head] = value;
 			else {
 				const cur = s[head];
@@ -857,6 +871,9 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!(Number.isFinite(op.factor) && op.factor >= 0 && op.factor <= SERIES_SCALE_MAX)) fail(`factor must be 0–${SERIES_SCALE_MAX}`);
 			for (const k of ['from', 'to'] as const) if (op[k] !== undefined && !isIsoDate(op[k])) fail(`${k} must be an ISO date`);
 			const s = d.series[kind] ?? fail(`the base has no ${kind} series`);
+			// Under the A-pan per hydro unit (engine ≥ 1.117.0) the daily A-pan series isn't read: scaling it would change nothing.
+			if (kind === 'evap_apan_mm' && resolveApanUnits(d.settings, m.nodes, false, []))
+				fail('the A-pan comes from the grid per hydro unit, which doesn’t read the daily A-pan series: change the A-pan row (settings apanMm) instead, which scales every unit’s A-pan');
 			const start = toEpochDay(s.startDate);
 			const a = op.from === undefined ? 0 : Math.max(0, toEpochDay(op.from) - start);
 			const b = op.to === undefined ? s.values.length - 1 : Math.min(s.values.length - 1, toEpochDay(op.to) - start);

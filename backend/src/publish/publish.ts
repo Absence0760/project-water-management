@@ -23,7 +23,8 @@ import {
 	LOCALES,
 	type NoticeText,
 	type RestrictionLevel,
-	type Transfer
+	type Transfer,
+	runApanRows
 } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -270,6 +271,8 @@ async function loadProjectionRun(
 		engine_version: string;
 		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[]; demandObjects?: DemandObject[]; irrigationSystems?: IrrigationSystemDef[] } | null;
 		apan_mm: unknown;
+		apan_basis: unknown;
+		apan_units: unknown;
 		runoff_model: string;
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
 		observed_until: string | null;
@@ -289,7 +292,7 @@ async function loadProjectionRun(
 				 FROM jsonb_each(inputs->'series') s
 				 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0)) AS observed_until,
 			summary->'forecast' AS forecast, created_at, encode(sha256(convert_to(inputs::text, 'UTF8')), 'hex') AS inputs_sha256, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone,
-			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, inputs->'settings'->'apanMm' AS apan_mm, summary->'calibration' AS calibration
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, inputs->'settings'->'apanMm' AS apan_mm, inputs->'settings'->'apanBasis' AS apan_basis, inputs->'settings'->'apanUnits' AS apan_units, summary->'calibration' AS calibration
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -316,7 +319,8 @@ async function loadProjectionRun(
 			crops: (model.crops ?? []) as CropDef[],
 			cropAreas: (model.cropAreas ?? []) as CropArea[],
 			irrigationSystems: model.irrigationSystems ?? null,
-			apanMm: Array.isArray(r.apan_mm) ? r.apan_mm : [],
+			// The A-pan rows the run read (engine ≥ 1.117.0): the catchment row and, under CCWR A-pan (Hydrological Unit), each unit's own.
+			...runApanRows({ apanMm: r.apan_mm, apanBasis: r.apan_basis, apanUnits: r.apan_units }, nodes),
 			// A unit with demand objects (engine ≥ 1.7.0) takes its consumptive share from its return flow.
 			...(model.demandObjects?.length ? { demandObjects: model.demandObjects as DemandObject[] } : {}),
 			series: (nodeId, key) => byKey.get(`${nodeId ?? ''}|${key}`)

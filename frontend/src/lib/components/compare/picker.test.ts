@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '#lib/api/types.js';
-import { compareSearch, compareTabHref, defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
+import { compareSearch, compareTabHref, defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, runOptionLabel, runPickName, SCENARIO_NAME_MAX } from './picker';
 
 const run = (id: string, label = ''): RunMeta => ({
 	id,
@@ -132,5 +132,35 @@ describe('compareTabHref', () => {
 		expect(compareTabHref(null, b)).toBe('?tab=compare&b=q%3Ar2');
 		expect(compareTabHref(null, null)).toBe('?tab=compare');
 		expect(compareTabHref(a, b, { projectId: 'p', runId: 'r3' })).toBe('?tab=compare&a=p%3Ar1&b=q%3Ar2&c=p%3Ar3');
+	});
+});
+
+describe('runPickName / a scenario’s run in a picker', () => {
+	const fmt = (iso: string) => iso.slice(0, 10);
+	const sc = (label: string, scenarioName: string | null, extra: Partial<RunMeta> = {}) => ({ ...run('r', label), scenarioId: 's', scenarioName, fromScenario: true, ...extra });
+
+	it('says a run of the scenario’s default label is the scenario’s', () => {
+		expect(runOptionLabel({ ...sc('Hexberg Dam', 'Hexberg Dam'), startDate: '1981-01-01', endDate: '2026-11-01' }, fmt)).toBe('Hexberg Dam (scenario) · 2026-09-23 · 1981–2026');
+		expect(runPickName(sc('', 'Hexberg Dam'))).toBe('Hexberg Dam (scenario)');
+		expect(runPickName(sc('Hexberg Dam (as licensed)', 'Hexberg Dam'))).toBe('Hexberg Dam (scenario, as licensed)');
+	});
+
+	it('names the scenario after a label of the user’s own, cut short when long', () => {
+		expect(runPickName(sc('Wet years', 'Hexberg Dam'))).toBe('Wet years (scenario: Hexberg Dam)');
+		const long = 'Raise the Hexberg Dam wall by four metres and add a second off-take';
+		const named = runPickName(sc('Try 2', long));
+		expect(named.startsWith('Try 2 (scenario: Raise the Hexberg Dam wall')).toBe(true);
+		expect(named.endsWith('…)')).toBe(true);
+		expect(named.length).toBeLessThanOrEqual('Try 2 (scenario: '.length + SCENARIO_NAME_MAX + 1);
+	});
+
+	it('still says scenario once the scenario is deleted (fromScenario, scenarioId null)', () => {
+		expect(runPickName(sc('Twice the demand', 'Twice the demand', { scenarioId: null }))).toBe('Twice the demand (scenario)');
+		expect(runPickName(sc('Old', null, { scenarioId: null }))).toBe('Old (scenario)');
+	});
+
+	it('leaves a run of the model as its label (positive control)', () => {
+		expect(runPickName({ ...run('r', 'Baseline'), fromScenario: false, scenarioId: null, scenarioName: null })).toBe('Baseline');
+		expect(runPickName(run('r'))).toBe('Untitled run');
 	});
 });

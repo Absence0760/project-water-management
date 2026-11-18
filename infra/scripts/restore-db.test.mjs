@@ -317,6 +317,30 @@ test('refuses to start without the sops secrets file that step 6 needs, before a
 	assert.deepEqual(r.tf, []);
 });
 
+test('a *.sops var file: checked to decrypt up front, then tf.sh decrypts it for import and plan', () => {
+	const ctx = setup();
+	const sopsVars = join(ctx.dir, 'prod.tfvars.sops');
+	writeFileSync(sopsVars, 'aws_region = "af-south-1"\n');
+	const args = ['--region', 'af-south-1', '--profile', 'water-management', '--var-file', sopsVars, '--restore-time', '2026-09-27T08:15:00Z', '--execute', '--yes'];
+	const r = run(ctx, args);
+	assert.equal(r.status, 0, r.stderr);
+	const evaluated = r.tf.filter((c) => ['import', 'plan'].includes(c.args[0]));
+	assert.equal(evaluated.length, 2);
+	for (const c of evaluated) {
+		const vf = c.args.find((a) => a.startsWith('-var-file='));
+		assert.match(vf, /\/prod\.tfvars$/, 'Terraform reads the decrypted copy');
+		assert.ok(!vf.includes(ctx.dir), 'from a temporary directory, not beside the encrypted file');
+	}
+	assert.ok(r.stdout.includes(` apply -var-file=${sopsVars}`), 'the printed apply names the encrypted file, which tf.sh accepts');
+
+	// A var file that won't decrypt stops before any AWS change.
+	const bad = run(setup(), args, { FAKE_SOPS_DECRYPT_FAIL: '1' });
+	assert.notEqual(bad.status, 0);
+	assert.match(bad.stderr, /could not decrypt .*prod\.tfvars\.sops as profile water-management/);
+	assert.deepEqual(bad.aws, [], 'not even a read');
+	assert.deepEqual(bad.tf, []);
+});
+
 test('refuses a region other than the stack\'s, and a stack without the database outputs', () => {
 	let r = run(setup({ outputs: { ...OUTPUTS, aws_region: 'us-east-1' } }), [...BASE, '--latest']);
 	assert.notEqual(r.status, 0);

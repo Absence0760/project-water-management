@@ -12,6 +12,7 @@
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { dayText, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
 import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolveGapRain, resolvePe, type GapRainSettings, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type UnitRainSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
+import { apanBasisIsUnits, apanUnitsError, type ApanBasis, type ApanUnitsSettings } from '../evaporation/apanUnits';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
@@ -327,6 +328,13 @@ export interface FitRecord {
 		/** settings.dataQuality's rain-check limits (engine ≥ 1.20.0); absent = the defaults. */
 		rainChecks?: RainCheckLimits;
 		/**
+		 * The A-pan per hydro unit the fit ran under (engine ≥ 1.117.0,
+		 * settings.apanUnits, docs/model.md §2.3b): each covered unit's 12
+		 * months; null = the one catchment row. Absent on a record made before
+		 * it, which ran on the one row, so a per-unit A-pan set since is a change.
+		 */
+		apanUnits?: { dataset: string; units: Record<string, number[]> } | null;
+		/**
 		 * Runoff from each unit's own rain (engine ≥ 1.78.0, settings.unitRain
 		 * `perUnit`, docs/model.md §2.4h): the setting and each land unit's rule,
 		 * the record it names and its factors. Recorded only when on: absent =
@@ -484,6 +492,24 @@ export function fitScoredThrough(r: Pick<CalibrationReport, 'fit' | 'splitSample
 	return last;
 }
 
+/** settings.apanUnits as a fit records it: the grid and each unit's 12 months; null when unset or unusable. */
+function apanUnitsOf(settings: { apanBasis?: unknown; apanUnits?: unknown }): { dataset: string; units: Record<string, number[]> } | null {
+	// Only under the 'units' basis: under the catchment row the stored rows aren't read.
+	if (!apanBasisIsUnits(settings.apanBasis)) return null;
+	const raw = settings.apanUnits;
+	if (raw === null || raw === undefined || apanUnitsError(raw)) return null;
+	const r = raw as ApanUnitsSettings;
+	return { dataset: r.dataset, units: Object.fromEntries(Object.keys(r.units).sort().map((id) => [id, [...r.units[id]!]])) };
+}
+
+/** Whether two A-pan per hydro unit records give GR4J other PE: one on a side only, a unit added or taken out, or another month. */
+function apanUnitsChanged(a: { units: Record<string, number[]> } | null, b: { units: Record<string, number[]> } | null): boolean {
+	if (!a || !b) return !a !== !b;
+	const ka = Object.keys(a.units).sort();
+	const kb = Object.keys(b.units).sort();
+	return !sameJson(ka, kb) || ka.some((id) => !closeArray(a.units[id]!, b.units[id]!));
+}
+
 const sameApanDaily = (a: ApanDailyFingerprint | null, b: ApanDailyFingerprint | null): boolean =>
 	a === null || b === null ? a === b : a.startDate === b.startDate && a.length === b.length && a.valuesSha256 === b.valuesSha256;
 
@@ -513,6 +539,9 @@ export interface FitContext {
 		flowGapFill?: FlowGapFillSettings | null;
 		/** settings.dataQuality (engine ≥ 1.20.0): its rain-check limits are recorded; absent = the defaults. */
 		dataQuality?: Partial<RainCheckLimits> | null;
+		/** The A-pan per hydro unit (engine ≥ 1.117.0) and whether the run reads it; absent = none. */
+		apanUnits?: ApanUnitsSettings | null;
+		apanBasis?: ApanBasis | null;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -596,6 +625,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
 			...(ctx.et0Daily !== undefined ? { et0Daily: ctx.et0Daily ? { ...ctx.et0Daily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality),
+			// Only when set (engine ≥ 1.117.0), so a fit without it records as before.
+			...(apanUnitsOf(ctx.settings) ? { apanUnits: apanUnitsOf(ctx.settings) } : {}),
 			...(r.unitRain ? { unitRain: structuredClone(r.unitRain) } : {}),
 			...(r.shareRain !== undefined ? { shareRain: r.shareRain ? structuredClone(r.shareRain) : null } : {}),
 			...(r.catchmentStation ? { catchmentStation: structuredClone(r.catchmentStation) } : {})
@@ -704,6 +735,13 @@ export interface FitRecordStatus {
 	 * `forcingChanged`.
 	 */
 	apanDailyChanged: boolean;
+	/**
+	 * The A-pan per hydro unit (engine ≥ 1.117.0, settings.apanUnits) was set,
+	 * cleared or changed since a GR4J fit that ran on pan coefficient × A-pan,
+	 * and GR4J still does: a unit's grid row, a unit added or taken out, or the
+	 * source itself. Absent when it hasn't. Also sets `forcingChanged`.
+	 */
+	apanUnitsChanged?: true;
 	/**
 	 * The daily reference ET series (engine ≥ 1.104.0, issue #604 R5-E) was
 	 * added, removed or changed since a GR4J fit that ran on a monthly PE row,
@@ -896,13 +934,18 @@ function forcingDiff(
 	rainSource: boolean;
 	rainChecks: boolean;
 	unitRain: boolean;
+	apanUnits: boolean;
 } | null {
 	if (!record.forcing) return null;
 	const pe = resolvePe(settings.pe, []);
 	const panReachesGr4j = pe.kind === 'pan';
+	// The A-pan per hydro unit (engine ≥ 1.117.0): under it the A-pan row isn't read, so only the units' rows compare.
+	const unitsNow = apanUnitsOf(settings);
+	const unitsThen = record.forcing.apanUnits ?? null;
 	return {
 		panCoefficient: panReachesGr4j && !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
-		apanMm: panReachesGr4j && !closeArray(settings.apanMm, record.forcing.apanMm),
+		apanMm: panReachesGr4j && !(unitsNow && unitsThen) && !closeArray(settings.apanMm, record.forcing.apanMm),
+		apanUnits: panReachesGr4j && apanUnitsChanged(unitsNow, unitsThen),
 		// Engine ≥ 0.31.0. A forcing without it ran pan coefficient × A-pan, so a monthly PE now is a change.
 		pe: peChanged(pe, resolvePe(record.forcing.pe, [])),
 		// Engine ≥ 1.13.0. A forcing without it ran with none, so a correction added since is a change.
@@ -1188,7 +1231,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 					forcing.gapRain ||
 					forcing.rainSource ||
 					forcing.rainChecks ||
-					forcing.unitRain)),
+					forcing.unitRain ||
+					forcing.apanUnits)),
+		...(forcing?.apanUnits ? { apanUnitsChanged: true as const } : {}),
 		chirpsSourceChanged,
 		apanDailyChanged,
 		et0DailyChanged,
@@ -1282,6 +1327,11 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'The daily A-pan evaporation series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
 		);
 	}
+	if (status.apanUnitsChanged) {
+		out.push(
+			'The A-pan per hydro unit has been set, cleared or changed since the fit (a unit’s A-pan from the grid, or which units have one), so the potential evaporation GR4J runs on changed for those units. GR4J’s parameters trade off against evaporation: refit before relying on them.'
+		);
+	}
 	if (status.et0DailyChanged) {
 		out.push(
 			'The daily reference evapotranspiration series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
@@ -1312,7 +1362,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'Parameters not fitted for this method: the fit ran under Fragmentation (one GR4J run on the catchment rain, split between the units), which is retired. Every run now makes runoff per unit, GR4J on each unit’s own rain (Model settings → Flow generation). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
 		);
 	}
-	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.et0DailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.apanUnitsChanged && !status.et0DailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, gap-filling product, rain-source periods, zero-rain run handling or the rain each unit runs on (runoff from each unit’s own rain, its records, MAPs and factors) has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS, gap-filling, rain-source and per-unit rain settings change the rain fed to it, so refit before relying on them.'
 		);

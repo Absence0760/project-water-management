@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Model settings → Demand: each unit's A-pan from the CCWR A-pan grid, a lazy chunk (UnitApanTable.svelte + unitApan.ts, 2.4 KB gzipped) loaded only when the CCWR option is picked, plus its API types and help line. Measured 2469 KB locally against the 2467 KB ceiling (+2 KB). Headroom ~1 KB."
+}

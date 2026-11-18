@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_IRRIGATION_SYSTEMS, newNetworkNode, type ProjectModel } from '@water-management/engine';
 import { ModelEditor } from './editor.svelte';
-import { findSystem, ownEfficiencyUsed, plantingSystemsLine, sabiRange, systemLabel, systemsOf, systemUse, unitEfficiency } from './systems';
+import { apanInputOf, apanOf, findSystem, ownEfficiencyUsed, plantingSystemsLine, sabiRange, systemLabel, systemsOf, systemUse, unitEfficiency } from './systems';
 import { validateModel } from './validate';
 import { returnFlowHint } from '#lib/components/network/fields.js';
 
@@ -100,5 +100,23 @@ describe('ModelEditor and irrigation systems', () => {
 		expect('irrigationSystemId' in ed.model.cropAreas[1]!).toBe(false);
 		ed.removeIrrigationSystem('drip');
 		expect(ed.model.crops[0]!.irrigationSystemId).toBeNull();
+	});
+});
+
+describe('apanInputOf (engine 1.117.0, CCWR A-pan (Hydrological Unit))', () => {
+	const land = (id: string, areaKm2: number) => ({ ...newNetworkNode(id, 0, null), kind: 'farm' as const, areaKm2 });
+	const nodes = [land('a', 3), land('b', 1), land('c', 2)];
+	const row = (v: number) => new Array<number>(12).fill(v);
+	it('is the one row as it was under the catchment basis, rows stored or not', () => {
+		const settings = { apanMm: row(100), apanUnits: { dataset: 'x', source: 's', units: { a: row(200) } } };
+		expect(apanInputOf(settings, nodes)).toBe(settings.apanMm);
+		expect(apanInputOf({ ...settings, apanBasis: 'catchment' }, nodes)).toBe(settings.apanMm);
+	});
+	it('under the units basis: each unit’s own, the rest the covered units’ area-weighted row', () => {
+		const a = apanInputOf({ apanMm: row(100), apanBasis: 'units', apanUnits: { dataset: 'x', source: 's', units: { a: row(200), b: row(400) } } }, nodes);
+		expect(apanOf(a, 'a')).toEqual(row(200));
+		expect(apanOf(a, 'b')).toEqual(row(400));
+		// (200 × 3 + 400 × 1) ÷ 4 = 250.
+		expect(apanOf(a, 'c')).toEqual(row(250));
 	});
 });

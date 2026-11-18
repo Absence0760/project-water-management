@@ -835,7 +835,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - Check that RDS PG17 on t4g.micro is offered there:
       `aws rds describe-orderable-db-instance-options --engine postgres --engine-version 17 --db-instance-class db.t4g.micro --region af-south-1`.
     - If af-south-1: set `budget_monthly_usd ≈ 70` and `dmarc_report_email`
-      in `infra-secrets/water-management/prod.tfvars`.
+      in `infra-secrets/water-management/prod.tfvars.sops`.
   - Also:
     - request the SES production-access review early (step 8a takes about a
       day);
@@ -1014,7 +1014,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.18 Automatic calibration
 
-> **Superseded in part by [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> **Superseded in part by [issue #4](https://github.com/jaredhoward-dev/project-water-management/issues/4)**
 > (Phases 4–5): the optimiser is **DDS** (not Nelder–Mead), the objectives add
 > KGE′, non-parametric KGE, NSE on √Q/log Q and FDC signatures, and it fits the
 > GR4J parameters as well as the legacy ones (until engine 1.0.0 removed the
@@ -1310,7 +1310,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.24 H1 volume-conserving event response
 
-> **Specified in [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> **Specified in [issue #4](https://github.com/jaredhoward-dev/project-water-management/issues/4)**
 > (Phases 1–3, 6–7): the proposed model is **GR4J** (X2 = 0) behind a
 > `RunoffModel` interface, with IHACRES-CMD as the benchmark and the legacy
 > model kept as the baseline until sign-off. The issue has the equations, the

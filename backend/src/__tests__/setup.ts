@@ -2,6 +2,11 @@
 // so tests run in a configured state without hitting real services.
 // Individual tests can use vi.stubEnv() to override or unset specific
 // vars for "what happens when X is missing" coverage.
+//
+// The imports sit first because ES modules evaluate them before any statement
+// here, wherever they are written: neither module may read process.env at load.
+import { generateFeedCredentialKeys } from '../feeds/credential.js';
+import { APP_URL, OWNER_URL } from './test-db.js';
 
 process.env.ALLOWED_ORIGINS = 'http://localhost:7777';
 process.env.SITE_URL = 'http://localhost:7777';
@@ -32,10 +37,17 @@ process.env.CHIRPS_SOURCE = 'chc';
 // until the operator has DWS's written answer (issue #604 R3-B); the store's
 // tests set store themselves (feeds/fromGaugeRecord.db.test.ts).
 process.env.DWS_SOURCE = 'live';
+// Station API feeds may be attached (issue #784; feeds/routes.ts stationApiFeedsOn); the test of the switch turns it off.
+process.env.STATION_API_FEEDS = 'on';
+// Their keys are sealed to a pair made for this test process, so no key is committed for tests (feeds/credential.ts).
+if (!process.env.FEED_CREDENTIAL_PUBLIC_KEY) {
+	const keys = generateFeedCredentialKeys();
+	process.env.FEED_CREDENTIAL_PUBLIC_KEY = keys.publicKey;
+	process.env.FEED_CREDENTIAL_PRIVATE_KEY = keys.privateKey;
+}
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<tag> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.
-import { APP_URL, OWNER_URL } from './test-db.js';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? APP_URL;
 process.env.TEST_MIGRATION_DATABASE_URL ??= OWNER_URL;
 // Guard: DB tests must never run against a non-test database.

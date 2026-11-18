@@ -133,6 +133,12 @@ export interface ProjectionRun {
 	irrigationSystems?: readonly IrrigationSystemDef[] | null;
 	apanMm?: ArrayLike<unknown>;
 	/**
+	 * Each land unit's own A-pan row the run read (engine ≥ 1.117.0, CCWR A-pan (Hydrological Unit);
+	 * ../evaporation/apanUnits.ts runApanRows, which also gives `apanMm` as the catchment row it ran on). A farm with
+	 * one weighs its plantings' efficiencies on it. Absent or null = every farm on `apanMm`.
+	 */
+	apanUnits?: { units: Readonly<Record<string, readonly number[]>> } | null;
+	/**
 	 * The snapshot's demand objects (engine ≥ 1.7.0, docs/model.md §2.7f): a
 	 * unit with an enabled one returns its objects' own shares, so its
 	 * consumptive share over a window follows its stored return_flow, not
@@ -478,13 +484,14 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 }
 
 /** The farm's irrigation efficiency as runModel ran it: its own (1 outside (0, 1]), combined with its crops' own (engine ≥ 0.43.0). */
-function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm' | 'irrigationSystems'>): number {
+function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm' | 'apanUnits' | 'irrigationSystems'>): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, run.apanMm ?? [], run.irrigationSystems) : e;
+	const apan = run.apanUnits?.units[n.id] ?? run.apanMm ?? [];
+	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, apan, run.irrigationSystems) : e;
 }
 
 /** k = 1 − r for a farm (r at most 1 − e), 1 − r for another water user, 1 for a gauge; clamped as runModel clamps them (run.ts irrigation, otherUsers). */
-function consumptiveShare(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm'>): number {
+function consumptiveShare(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm' | 'apanUnits'>): number {
 	if (n.kind === 'user') {
 		const r = n.userReturnPct ?? 0;
 		return 1 - (Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0);

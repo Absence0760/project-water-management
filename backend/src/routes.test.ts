@@ -238,6 +238,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Each unit's monthly A-pan from the CCWR A-pan grid (comparison only): auth-gated like every project route.
+	it('inventories the unit A-pan routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/map/unit-apan', 'POST /projects/:id/map/unit-apan']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The Map's search (issue #523 C5): our own reference tables only, behind a session like every project route.
 	it('inventories the map search route as auth-gated', () => {
 		expect(routes).toContain('GET /projects/:id/map/search');
@@ -271,7 +279,7 @@ describe('route auth inventory', () => {
 
 	// Firm yield (WP-3.6, 040_yield): auth-gated like every project route.
 	it('inventories the yield routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/yield', 'GET /projects/:id/yield', 'GET /projects/:id/yield/jobs', 'POST /projects/:id/yield/:jobId/cancel']) {
+		for (const r of ['POST /projects/:id/yield', 'GET /projects/:id/yield', 'GET /projects/:id/yield/jobs', 'GET /projects/:id/yield/options', 'POST /projects/:id/yield/:jobId/cancel']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

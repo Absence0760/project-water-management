@@ -1,6 +1,6 @@
 // Runs a daily RunoffModel over a run's forcing: builds rain and potential
 // evaporation, warms the stores up, steps every day and converts mm to m³/day.
-import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from '../calendar';
 import { apanDailyMm, hasDailyApanValue } from '../evaporation/apanDaily';
 import { et0DailyMm, hasDailyEt0Value, readsEt0Daily } from '../evaporation/et0Daily';
 import { arealRainFactors, gr4jPeMonthlyMm, type ArealRain, type PeInput, type ProjectSettings } from '../project';
@@ -83,6 +83,36 @@ export function runoffForcing(
 		petMm[t] = a === a ? Math.max(0, (settings.panCoefficient[wy] ?? 0) * a) : e === e ? e : Math.max(0, peMm[wy]! / daysInMonth(d0 + t));
 	}
 	return { rainMm, petMm };
+}
+
+/**
+ * Each land unit's potential evaporation under the A-pan per hydro unit
+ * (engine ≥ 1.116.0, docs/model.md §2.3b): runoffForcing's PE on the unit's
+ * own A-pan row (pan coefficient × its month, spread over the month's days).
+ * `shared`, the catchment PE, for a unit with no row of its own or one equal
+ * to the catchment row, and for every unit under a monthly PE row, which
+ * replaces A-pan for GR4J. `settings` as prepareRun resolved them.
+ */
+export function unitPetMm(
+	settings: Pick<ProjectSettings, 'apanMm' | 'panCoefficient' | 'apanUnits'> & { pe?: PeInput | null },
+	ctx: Pick<RunContext, 'startDate' | 'days' | 'aligned'>,
+	units: readonly { nodeId: string }[],
+	shared: Float64Array
+): Float64Array[] {
+	const own = settings.apanUnits?.units;
+	if (!own || settings.pe?.kind === 'monthly') return units.map(() => shared);
+	const byRow = new Map<string, Float64Array>();
+	return units.map((u) => {
+		const row = own[u.nodeId];
+		if (!row || row.every((v, m) => v === settings.apanMm[m])) return shared;
+		const key = row.join(',');
+		let pet = byRow.get(key);
+		if (!pet) {
+			pet = runoffForcing({ ...settings, apanMm: row as unknown as Monthly, arealRain: null }, ctx).petMm;
+			byRow.set(key, pet);
+		}
+		return pet;
+	});
 }
 
 /**
@@ -271,10 +301,11 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 	if (!built) return null;
 	const { units, recipes } = built;
 	const days = ctx.days;
-	// The catchment PE (runoffForcing's), the same for every unit.
-	const petMm = runoffForcing({ ...ctx.settings, arealRain: null }, ctx).petMm;
+	// The catchment PE (runoffForcing's), the same for every unit but under the A-pan per hydro unit (engine ≥ 1.117.0).
+	const sharedPet = runoffForcing({ ...ctx.settings, arealRain: null }, ctx).petMm;
+	const unitPet = unitPetMm(ctx.settings, ctx, units, sharedPet);
 	const paramsOf = locationParamsOf(zones, p);
-	const traces = simulateUnits(units, p, petMm, {
+	const traces = simulateUnits(units, p, unitPet, {
 		warmupDays,
 		...(paramsOf ? { paramsOf } : {}),
 		...(ctx.historyDays !== undefined ? { cycleDays: ctx.historyDays } : {}),
@@ -283,6 +314,16 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 	});
 	// Node-id order (unitRainForcing's), so the sums are the same to the bit however the nodes are listed.
 	const area = units.reduce((s, u) => s + u.areaKm2, 0);
+	// The catchment's PE series: the units' own, area-weighted, when some unit has its own.
+	let petMm = sharedPet;
+	if (unitPet.some((x) => x !== sharedPet)) {
+		petMm = new Float64Array(days);
+		units.forEach((u, k) => {
+			const wgt = u.areaKm2 / area;
+			const x = unitPet[k]!;
+			for (let t = 0; t < days; t++) petMm[t] = petMm[t]! + x[t]! * wgt;
+		});
+	}
 	const naturalFlowM3Day = new Float64Array(days);
 	const rain = new Float64Array(days);
 	const before = units.some((u) => u.rainBeforeArealMm) ? new Float64Array(days) : null;
@@ -341,7 +382,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		nodeSeries,
 		warnings,
 		unitRunoff,
-		unitRain: unitRainSummary(ctx.settings.unitRain ?? resolveUnitRain(null, []), units, traces, petMm, built.reference, zones ? { assignment: zones, base: p } : null),
+		unitRain: unitRainSummary(ctx.settings.unitRain ?? resolveUnitRain(null, []), units, traces, unitPet, built.reference, zones ? { assignment: zones, base: p } : null),
 		unitRecipes: recipes,
 		...(built.stations.length ? { stationUnits: built.stations } : {}),
 		balance: {

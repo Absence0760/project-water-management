@@ -21,6 +21,7 @@
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
+import { replaceEvaporationDataset } from '../geo/evaporationGrid.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, confirmAsOperator, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
@@ -436,6 +437,24 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
 		return SAMPLE['POST /projects/:id/map/unit-map']!(ctx);
 	},
+	// Each unit's own A-pan (engine 1.117.0, geo/unitApanRoutes.ts): an invented A-pan grid over the ladder's parcel
+	// (21.30–21.32° E), loaded first under the sample's label and removed in afterAll so no other file sees it.
+	'POST /projects/:id/map/unit-apan': async () => {
+		const cells: { row: number; col: number; monthlyMm: number[] }[] = [];
+		for (let row = -3380; row < -3360; row++) for (let col = 2125; col < 2140; col++) cells.push({ row, col, monthlyMm: [150, 180, 210, 220, 190, 160, 110, 80, 60, 60, 80, 110] });
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			await replaceEvaporationDataset(
+				client,
+				{ dataset: 'ladder-apan', kind: 'apan', source: 'Invented A-pan grid', version: '1', attribution: 'test', method: 'test' },
+				{ cellDeg: 0.01, originLon: 0, originLat: 0, firstYear: null, lastYear: null, cells, partial: 0 }
+			);
+		} finally {
+			await client.end();
+		}
+		return SAMPLE['POST /projects/:id/map/unit-apan']!(ctx);
+	},
 	// A reach of the synthetic river network (issue #345, geo/rivers.ts), loaded first so the add has one to copy.
 	'POST /projects/:id/map/rivers/add': async () => {
 		await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
@@ -788,6 +807,10 @@ beforeAll(async () => {
 afterAll(async () => {
 	// The ladder's yield job and what the sweep's POSTs queued (the rules' run …/auto-calibrations queues among them).
 	await clearLadderJobs(ctx);
+	// The invented A-pan grid the unit-apan recipe loaded: no other file should find an A-pan grid it didn't load.
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', ['ladder-apan']).finally(() => client.end());
 	await db?.end();
 });
 

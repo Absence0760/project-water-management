@@ -36,15 +36,28 @@
 # A saved plan is applied through this script too: Terraform asks for the
 # ephemeral values again at apply (and the counter comes out the same).
 #
+# A -var-file whose name ends in .sops (the production one is
+# infra-secrets/water-management/prod.tfvars.sops, sops binary format) is
+# decrypted to a 0600 file in a private temporary directory, which Terraform
+# reads instead and which is removed when Terraform exits
+# (sops-var-file.sh). The runtime_secret_version check below reads that
+# decrypted copy. Plaintext var files pass through unchanged.
+#
 # WM_SECRETS_FILE overrides the sops file (default: the infra-secrets clone
 # beside this repo, ~/github/infra-secrets).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=sops-var-file.sh
+. "$here/sops-var-file.sh"
 secrets="${WM_SECRETS_FILE:-$here/../../../infra-secrets/water-management/prod.sops.yaml}"
 # The sops keys that become TF_VAR_<key> (variables.tf § Runtime secrets;
 # infra/prod.sops.yaml.example).
 keys=(auth_jwt_secret db_app_password alerts_token_secret cloudfront_private_key app_encryption_key)
+# Keys a feature needs only once it is on, passed when present and non-empty:
+# feed_credential_private_key, the fetcher's key for station API feeds (issue
+# #784; variables.tf refuses station_api_feeds without it).
+optional_keys=(feed_credential_private_key)
 
 die() {
 	echo "tf.sh: $*" >&2
@@ -73,7 +86,7 @@ last_modified_version() {
 }
 
 command -v sops > /dev/null || die "sops not found on PATH (docs/deployment.md § Prerequisites)."
-[ -f "$secrets" ] || die "no sops file at $secrets. Clone Absence0760/infra-secrets beside this repo, or set WM_SECRETS_FILE."
+[ -f "$secrets" ] || die "no sops file at $secrets. Clone jaredhoward-dev/infra-secrets beside this repo, or set WM_SECRETS_FILE."
 if [ "${1:-}" = "--preflight" ]; then
 	[ $# -eq 1 ] || die "--preflight takes no other arguments."
 	[ -n "${TF_VAR_runtime_secret_version:-}" ] || last_modified_version > /dev/null
@@ -82,14 +95,46 @@ fi
 [ $# -gt 0 ] || die "usage: tf.sh <terraform arguments> (e.g. tf.sh plan -var-file=…), or tf.sh --preflight"
 command -v terraform > /dev/null || die "terraform not found on PATH."
 
+workdir=.
+for a in "$@"; do
+	case "$a" in -chdir=*) workdir="${a#-chdir=}" ;; esac
+done
+
+# Decrypt each *.sops var file and hand Terraform the decrypted copy instead.
+tmp=""
+declare -A shown=()
+decrypted_var_file() {
+	local f="$1"
+	# Terraform reads a relative -var-file from the -chdir directory.
+	case "$f" in /*) ;; *) [ -f "$f" ] || f="$workdir/$f" ;; esac
+	sops_var_file "$f" "$tmp"
+}
+args=()
+prev=""
+for a in "$@"; do
+	b="$a"
+	if [[ "$prev" = "-var-file" && "$a" = *.sops ]] || [[ "$a" = -var-file=*.sops ]]; then
+		if [ -z "$tmp" ]; then
+			tmp="$(umask 077 && mktemp -d)"
+			trap 'rm -rf "$tmp"' EXIT
+		fi
+		src="$a"
+		[ "$prev" = "-var-file" ] || src="${a#-var-file=}"
+		out="$(decrypted_var_file "$src")"
+		shown["$out"]="$src"
+		if [ "$prev" = "-var-file" ]; then b="$out"; else b="-var-file=$out"; fi
+	fi
+	args+=("$b")
+	prev="$a"
+done
+set -- "${args[@]}"
+
 # Refuse a var file that pins the counter: the files named with -var-file, and
 # the ones Terraform loads by itself from its working directory (-chdir).
-workdir=.
 var_files=()
 prev=""
 for a in "$@"; do
 	case "$a" in
-		-chdir=*) workdir="${a#-chdir=}" ;;
 		-var-file=*) var_files+=("${a#-var-file=}") ;;
 	esac
 	[ "$prev" = "-var-file" ] && var_files+=("$a")
@@ -105,7 +150,7 @@ for f in ${var_files[@]+"${var_files[@]}"}; do
 	# HCL (`runtime_secret_version = …`, at a line start) or JSON (the quoted
 	# key anywhere, since a .tfvars.json may be one line).
 	if grep -Eq '^[[:space:]]*runtime_secret_version[[:space:]]*=|"runtime_secret_version"[[:space:]]*:' "$f"; then
-		die "$f sets runtime_secret_version, which would pin the rotation counter. Remove it: this script derives it from sops.lastmodified (for a forced rewrite, pass -var runtime_secret_version=…)."
+		die "${shown[$f]:-$f} sets runtime_secret_version, which would pin the rotation counter. Remove it: this script derives it from sops.lastmodified (for a forced rewrite, pass -var runtime_secret_version=…)."
 	fi
 done
 
@@ -130,7 +175,17 @@ for k in '"${keys[*]}"'; do
 	export "TF_VAR_$k=$v"
 	unset "$k"
 done
+for k in '"${optional_keys[*]}"'; do
+	v=$(printenv "$k") || continue
+	[ -z "$v" ] || export "TF_VAR_$k=$v"
+	unset "$k"
+done
 unset k v
 exec terraform'"$quoted"
 
-exec sops exec-env --same-process "$secrets" "$inner"
+# With a decrypted var file, wait for Terraform so the EXIT trap removes it.
+if [ -n "$tmp" ]; then
+	sops exec-env --same-process "$secrets" "$inner"
+else
+	exec sops exec-env --same-process "$secrets" "$inner"
+fi

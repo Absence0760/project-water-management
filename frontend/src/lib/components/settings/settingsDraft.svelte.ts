@@ -89,6 +89,7 @@ export function rebaseSettings(draft: EditableSettings, before: EditableSettings
  * (backend/src/projects/settings.ts REPLACED_WHOLE, which settingsDraft.test.ts checks this against).
  */
 export const PATCH_REPLACED_WHOLE: ReadonlySet<string> = new Set([
+	'apanUnits',
 	'fitRecord',
 	'pe',
 	'arealRain',
@@ -248,6 +249,15 @@ export class SettingsDraft {
 
 	get dirty(): boolean {
 		return JSON.stringify(this.s) !== this.#saved;
+	}
+
+	/**
+	 * Unsaved changes other than `keys`: Demand's CCWR A-pan (Hydrological Unit) Use saves the basis itself, so a
+	 * form whose only change is picking that option (settings.apanBasis) doesn't hold it back.
+	 */
+	dirtyBesides(...keys: string[]): boolean {
+		const strip = (o: object) => JSON.stringify(o, (k, v) => (k !== '' && keys.includes(k) ? undefined : v));
+		return strip($state.snapshot(this.s) as object) !== strip(JSON.parse(this.#saved) as object);
 	}
 
 	/** Put the saved settings back. */

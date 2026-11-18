@@ -133,6 +133,18 @@ describe('river off-takes (engine 1.14.0)', () => {
 		passes(input, out);
 	});
 
+	it('shows the delivery on the canal as offtake_in, not in its transfer series, which is labelled for dam transfers only', () => {
+		// A user charting the canal's "Transfer" saw zeros and took the canal for dry: the label now says where to look.
+		const out = run(model([offtake()]));
+		const transfer = (id: string) => out.series.find((x) => x.nodeId === id && x.key === 'transfer')!;
+		expect(transfer('C').values).toEqual([0, 0]);
+		expect(transfer('S').values).toEqual([0, 0]);
+		expect(transfer('C').label).toBe('Dam transfers (in + / out −; river off-takes are listed separately)');
+		const delivered = out.series.find((x) => x.nodeId === 'C' && x.key === 'offtake_in')!;
+		expect(delivered.label).toBe('Delivered by river off-takes into this unit (after conveyance losses)');
+		expect(delivered.values).toEqual([100, 100]);
+	});
+
 	it('never takes more than the river there: a dry day takes nothing, a low day what flows', () => {
 		const input = model([offtake()]);
 		const out = run(input, [0, 30]);

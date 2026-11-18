@@ -31,7 +31,7 @@ import { scheduleFactors } from '../network/demandSchedule';
 import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
 import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverShortKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
-import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
+import { dailyDemandFactor, damWorkings, inputApanUnits, lakeEvaporationMmDay, runEfficiency } from './workings';
 import { CHECK_GAUGE_FLOW_KEY, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
@@ -1593,7 +1593,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	const get = seriesMap(out);
 	// Open-water evaporation depth per day and the day's rain on a dam (audit N2), from the run's own settings and rain.
 	const day0 = toEpochDay(out.startDate);
-	const evapMmDay = lakeEvaporationMmDay(input, out.startDate, out.days);
+	const evapShared = lakeEvaporationMmDay(input, out.startDate, out.days);
+	// Under the A-pan per hydro unit (engine ≥ 1.117.0) a covered unit's dam loses its own row.
+	const perUnit = inputApanUnits(input);
 	const rainFinal = get.get('null|rain_final');
 	const damRain = (t: number) => {
 		const v = rainFinal?.[t];
@@ -1607,6 +1609,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const missing = keys.find((_, i) => !cols[i]);
 		if (missing) return `${n.id}: working column ${missing} missing`;
 		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, AREA, PD, EV, SP, P, Q, R, S, T, U, V] = cols as number[][];
+		const evapMmDay = perUnit?.setting.units[n.id] ? lakeEvaporationMmDay(input, out.startDate, out.days, n.id) : evapShared;
 		// The priority users' requirement (WP-1.33): present only when a priority user's demand is passed down.
 		const ZS = g('senior_requirement');
 		const PASSED = g('passed_for_senior');

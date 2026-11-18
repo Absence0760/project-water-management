@@ -13,7 +13,7 @@ const inRange = (v: unknown, lo: number, hi: number): v is number => isNum(v) &&
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= 100;
 const NODE_KINDS: readonly unknown[] = ['farm', 'gauge', 'user'];
 const MESSAGE_KEYS = ['type', 'id', 'request'];
-const REQUEST_KEYS = ['input', 'ops', 'nodeId', 'pattern', 'assurance', 'tolerance'];
+const REQUEST_KEYS = ['input', 'ops', 'nodeId', 'pattern', 'patternNodeId', 'assurance', 'tolerance'];
 const EFFECT_KEYS = ['baseKey', 'base', 'edited'];
 const onlyKeys = (o: Obj, keys: readonly string[]) => Object.keys(o).every((k) => keys.includes(k));
 
@@ -67,7 +67,9 @@ export function parseMessage(data: unknown): { ok: true; msg: ToWorker } | { ok:
 	if (!p) return bad('pattern must be constant, demand or 12 factors 0–1 000 000');
 	if (!inRange(r.assurance, 0.5, 1)) return bad('assurance must be 0.5–1');
 	if (!inRange(r.tolerance, 1e-5, 0.05)) return bad('tolerance must be 0.00001–0.05');
+	if (r.patternNodeId !== undefined && (!isId(r.patternNodeId) || p !== 'demand')) return bad("patternNodeId must be an id, with the 'demand' pattern");
 	const request: YieldPreviewRequest = { input: r.input as unknown as ModelInput, nodeId: r.nodeId, pattern: p, assurance: r.assurance, tolerance: r.tolerance };
+	if (r.patternNodeId !== undefined) request.patternNodeId = r.patternNodeId;
 	if (r.ops !== undefined) {
 		const { ops, errors } = validateScenarioOps(r.ops);
 		if (errors.length) return bad(`the scenario's ops: ${errors.join('; ')}`);
@@ -96,7 +98,7 @@ export function previewYield(req: YieldPreviewRequest): YieldPoint {
 	} catch (err) {
 		throw new Error(`the model can't run this input: ${(err as Error).message}`);
 	}
-	return firmYield(problem, req.nodeId, { pattern: req.pattern, assurance: req.assurance, tolerance: req.tolerance });
+	return firmYield(problem, req.nodeId, { pattern: req.pattern, assurance: req.assurance, tolerance: req.tolerance, ...(req.patternNodeId !== undefined ? { patternNodeId: req.patternNodeId } : {}) });
 }
 
 // The last run's output, kept while previews of the same run follow each

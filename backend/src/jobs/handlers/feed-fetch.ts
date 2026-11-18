@@ -39,6 +39,10 @@
 // dev, CI and e2e) a DWS fetch reads its station's days from our gauge record
 // store (247_gauge_record) the same way, in this job (issue #604 R3-B).
 //
+// A station API feed (issue #784) has no copy: it fetches inline in dev and
+// through the fetcher in production (FEED_FETCHER=sqs), the request carrying
+// its key sealed (feeds/credential.ts), opened only where the fetch runs.
+//
 // After the cutover (both of those, issue #604 R3-C) no fetch reaches the
 // SQS or inline paths below, so production sets no FEED_FETCHER and has no
 // fetch-requests queue (infra/feeds.tf local.per_feed_fetching). The inline
@@ -48,7 +52,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
 import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheStore.js';
-import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../../feeds/config.js';
+import { chirpsProduct, type FeedConfig, type FeedSource, type GridConfig, gridCells, type StationApiConfig } from '../../feeds/config.js';
 import { type CellsResult, copyWindowYears, type FetchRequest, type FetchWindow, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
@@ -81,9 +85,31 @@ export { feedFetchDedupeKey } from '../../feeds/store.js';
  * (feeds/http.ts PACE_*) holds within an instance. DWS is its own group, so a
  * CHIRPS backfill doesn't hold up a gauge's fetch. Across Lambdas (the Python
  * mirror-ingest asks CHC too), the fetcher takes CHC's shared request slot
- * (feeds/hostSlot.ts) on top of this.
+ * (feeds/hostSlot.ts) on top of this. A station API feed (issue #784) is
+ * grouped by its URL's host, `station:<host>`: one fetch at a time to each
+ * station provider, never queued behind CHC's or DWS's (and taking no CHC
+ * slot). At most 128 characters, SQS's limit for a group id.
  */
-export const fetchGroup = (source: FeedSource): 'chc' | 'dws' => (source === 'dws' ? 'dws' : 'chc');
+export function fetchGroup(source: FeedSource, config?: FeedConfig): string {
+	if (source === 'dws') return 'dws';
+	if (source === 'station_api') {
+		const host = URL.parse((config as StationApiConfig | undefined)?.url.replace(/\{(station|start|end)\}/g, 'x') ?? '')?.hostname;
+		return `station:${host || 'unknown'}`.slice(0, 128);
+	}
+	return 'chc';
+}
+
+/**
+ * The queue a fetch request goes to (issue #784): station API feeds have their own
+ * (STATION_FETCH_REQUESTS_QUEUE_URL) with its own fetcher trigger (infra/feeds.tf, "Station fetches apart"), so a
+ * project's slow station hosts can't hold the trigger that CHIRPS and DWS fetches use; every other source goes to
+ * fetch-requests. A station fetch never falls back to the shared queue: with its queue unset it fails (feedFetchHandler).
+ */
+export function fetchQueue(source: FeedSource, env: Record<string, string | undefined> = process.env): { url: string | undefined; name: string } {
+	return source === 'station_api'
+		? { url: env.STATION_FETCH_REQUESTS_QUEUE_URL, name: 'STATION_FETCH_REQUESTS_QUEUE_URL' }
+		: { url: env.FETCH_REQUESTS_QUEUE_URL, name: 'FETCH_REQUESTS_QUEUE_URL' };
+}
 
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
@@ -98,6 +124,8 @@ export const feedFetchHandler = defineHandler({
 		const copyYears = fromCopy ? copyWindowYears(copyCellCount(feed.config)) : undefined;
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough, { copyYears });
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
+		// A station API feed's key travels sealed (feeds/credential.ts): only the fetcher (or this worker, inline in dev) opens it.
+		if (feed.source === 'station_api') Object.assign(request, { feedId: feed.id, credential: feed.credential ?? null });
 		if (fromCopy) {
 			const started = Date.now();
 			const outcome = await fetchFromMirror(db, feed, window, { jobId: job.id, today });
@@ -160,6 +188,12 @@ export const feedFetchHandler = defineHandler({
 			if (recheck) request.recheck = { cells: grid(cells), head: recheck.head, read: recheck.read };
 		}
 		if (feedFetcher() === 'sqs') {
+			const queue = fetchQueue(feed.source);
+			// No retry fixes a missing station queue (station API feeds switched off on this server, or Terraform not
+			// applied): fail at once, before recording a fetch that can't go out, and never use the shared queue.
+			if (feed.source === 'station_api' && !queue.url) {
+				throw new JobError('station API feeds have no fetch queue on this server (STATION_FETCH_REQUESTS_QUEUE_URL is not set): they are off here', { retry: false });
+			}
 			// Committed now, on its own connection, before the request leaves (as
 			// report-render.ts commits its token): the answer is applied only if
 			// app_take_feed_fetch finds this record, and it can't see one this
@@ -171,7 +205,7 @@ export const feedFetchHandler = defineHandler({
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };
 			try {
 				// One message group per source host (fetchGroup): the FIFO queue hands the fetcher one fetch per group at a time (infra/feeds.tf).
-				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message, { group: fetchGroup(feed.source), dedupe: job.id });
+				await sendToQueue(queue.url, queue.name, message, { group: fetchGroup(feed.source, feed.config), dedupe: job.id });
 			} catch (err) {
 				// Nothing went out: withdraw the record, so the feed isn't held as
 				// "a fetch is still out" (fromBoundary.ts, fromUnits.ts) by an
@@ -192,7 +226,9 @@ export const feedFetchHandler = defineHandler({
 		} catch (err) {
 			if (err instanceof LiveFeedRequestRefusedError) {
 				throw new JobError(
-					`this worker may not fetch ${feed.source} from the source itself: production reads it from our copy or store (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) or hands it to the fetcher (FEED_FETCHER=sqs)`,
+					feed.source === 'station_api'
+						? 'this worker may not ask a station’s API itself: production hands station API feeds to the fetcher (FEED_FETCHER=sqs)'
+						: `this worker may not fetch ${feed.source} from the source itself: production reads it from our copy or store (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) or hands it to the fetcher (FEED_FETCHER=sqs)`,
 					{ retry: false }
 				);
 			}

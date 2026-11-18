@@ -2,7 +2,7 @@
 // inputs: checkYield returns null when they hold, else what broke.
 import type { ModelInput } from '../project';
 import { simulateNetwork } from '../network/simulate';
-import { firmYield, isMonotone, prepareYield, storageYieldCapacities, YIELD_DEFAULT_TOLERANCE } from '../network/yield';
+import { firmYield, isMonotone, prepareYield, storageYieldCapacities, YIELD_DEFAULT_TOLERANCE, YIELD_START_FULL_SHARE } from '../network/yield';
 import { transferDestinations } from '../network/transferSplits';
 
 /**
@@ -16,11 +16,13 @@ export function isolateDam(input: ModelInput, nodeId: string): ModelInput {
 	const x = structuredClone(input);
 	// A dam that starts below its minimum operating level supplies nothing until
 	// it fills to it, and a bigger one (the same fractions) takes longer to: its
-	// yield can be lower. Start it at least at that level.
+	// yield can be lower. Start it at least at that level; the yield search starts
+	// every dam half full (YIELD_START_FULL_SHARE, engine 1.117.0), so the level is
+	// kept at or below that share too.
 	for (const n of x.model.nodes)
 		// Lossless also means no survey curve (its area would evaporate) and no
 		// release rule (WP-3.5): a release is a second draft ahead of the yield.
-		if (n.id === nodeId) Object.assign(n, { damAreaFullM2: 0, damSeepagePerDay: 0, damInitialPct: Math.max(n.damInitialPct, n.damMinPct), damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null });
+		if (n.id === nodeId) Object.assign(n, { damAreaFullM2: 0, damSeepagePerDay: 0, damMinPct: Math.min(n.damMinPct, YIELD_START_FULL_SHARE), damInitialPct: Math.max(n.damInitialPct, Math.min(n.damMinPct, YIELD_START_FULL_SHARE)), damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null });
 	x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nodeId && !transferDestinations(t).some((d) => d.nodeId === nodeId));
 	return x;
 }

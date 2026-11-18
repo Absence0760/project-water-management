@@ -82,7 +82,7 @@ The checklist for these is issue #62; the history scrub is #63.
          `aws ec2 describe-vpc-endpoint-services --region af-south-1 --service-names com.amazonaws.af-south-1.bedrock-runtime --query 'ServiceDetails[0].ServiceName' --output text`
          (expect the name back), and that the Lambda concurrency quota
          covers 2 more reserved (infra/README.md § Operator steps).
-      4. Set `assistant_enabled = true` in `prod.tfvars`, plan, and apply
+      4. Set `assistant_enabled = true` in `prod.tfvars.sops`, plan, and apply
          through `scripts/tf.sh`.
       5. Re-run `~/github/templates/scripts/export-tf-vars.sh infra/` so the
          repository variable `ASSISTANT_FUNCTION_NAME` exists, then release
@@ -669,30 +669,23 @@ open:
       worked values, and the method text naming the version. Trigger: a copy
       of the paper, or the validation showing PenPan's bias is too large.
 
-## A-pan for each unit from the CCWR grid (on hold, 2026-11-09)
+## A-pan for each unit from the CCWR grid (done, 2026-11-09)
 
 The operator first asked that, with the CCWR A-pan grid chosen, each
-hydrological unit run on its own monthly A-pan (its average over the unit's
-outline), in the crop demand and in the runoff model. They then narrowed the
-scope to the catchment average only ("Leave the model running on catchment
-A-pan evaporation for now"), which Demand's **CCWR A-pan grid (catchment
-average)** option is. On hold, not cancelled:
+hydrological unit run on its own monthly A-pan, then put it on hold, then
+asked for it again on 2026-11-09 as a choice in Model settings → Demand →
+**A-pan from**: **CCWR A-pan (Catchment)** (the one averaged row, as
+before) or **CCWR A-pan (Hydrological Unit)**.
 
-- [ ] **Per-unit A-pan from the CCWR grid.** The operator's answers for when
-      it comes back (2026-11-09): (1) a dam evaporates at its own unit's
-      A-pan, and a dam outside every unit at the area-weighted catchment
-      mean; (2) a daily A-pan record is ignored while the per-unit grid is
-      the source; (3) a unit under 90 % covered by the grid runs on the
-      covered units' area-weighted mean, with a run warning and a line in Run
-      readiness. An engine draft with passing tests (18 of 18) was never
-      committed: it is kept outside the repo, in the gitignored
-      `reviews/per-unit-apan-2026-11-09/` of the main checkout on the laptop
-      it was written on (`per-unit-engine.patch`, `apanUnits.ts`,
-      `run.apanUnits.test.ts`), so treat it as a starting point only. Durable
-      fix: an engine change (A-pan per unit in demand, GR4J's PE and dam
-      evaporation, an ENGINE_VERSION bump, docs/model.md), the Demand option
-      switching to per unit, tests and the cross-check. Trigger: the operator
-      asks for it again, after the Atlas grids are loaded (issue #755).
+- [x] **Each unit's A-pan from the grid, shown.** The Hydrological Unit
+      option's table: each unit's 12 monthly means over its outline beside
+      the catchment average, its year and difference
+      (`GET …/map/unit-apan`, docs/maps.md § A-pan for each unit).
+- [x] **Per-unit A-pan in the engine (1.117.0).** Crop demand, a dam's
+      evaporation and GR4J's PE per unit, with the operator's three answers
+      (docs/model.md §2.3b; engine-audit.md AP1, AU1–AU3), saved per unit
+      with Use (`POST …/map/unit-apan`), the cross-check and both generators
+      drawing it, methodology version 15.
 
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
@@ -1120,11 +1113,11 @@ runs and accumulations are real) can't be decided without the client.
       the bridge reads instead. Trigger: the first live outlook with the
       hindcasts backfilled, or a worker timeout on a `c3s` outlook.
 - [x] **Runoff from each unit's own rain (engine 1.78.0,
-      [#482](https://github.com/Absence0760/project-water-management/issues/482),
+      [#482](https://github.com/jaredhoward-dev/project-water-management/issues/482),
       model.md §2.4h).** Built off by default (`settings.unitRain` absent
       runs as before, to the bit). Every provisional call was answered by
       the operator on 2026-10-09
-      ([#500](https://github.com/Absence0760/project-water-management/issues/500),
+      ([#500](https://github.com/jaredhoward-dev/project-water-management/issues/500),
       items 1a–8) and is built in engine 1.85.0 (engine-audit.md § Decided
       rules 2026-10-09): the reference gauge's monthly factors × k_unit
       (each unit rescaled to its own MAP), fitted against the checked gauge
@@ -1272,7 +1265,7 @@ runs and accumulations are real) can't be decided without the client.
       release carrying migration 266 is in production and no older backend
       can be rolled back to.
 - [x] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
-      [#455](https://github.com/Absence0760/project-water-management/issues/455),
+      [#455](https://github.com/jaredhoward-dev/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
       EWR). **Confirmed by the client's hydrologist 2026-10-10 (#90 A8, via
       B1a and B2):** the daily lookup is their own process; both scalings
@@ -1334,7 +1327,7 @@ runs and accumulations are real) can't be decided without the client.
       no rain, no evaporation, no area.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
-      [#1](https://github.com/Absence0760/project-water-management/issues/1)
+      [#1](https://github.com/jaredhoward-dev/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
       validation target, and the gauge column (not a suitable calibration
       record; private source repo) is a regional wet/dry index only
@@ -2872,7 +2865,7 @@ Still open:
       have asked for (`fullAllocationFactors`, model.md §2.12a, probe
       `scaled-no-demand-tail-year`, `mode.test.ts`).
 - [x] **`verify/` runoff from each unit's own rain** (part E of
-      [#482](https://github.com/Absence0760/project-water-management/issues/482);
+      [#482](https://github.com/jaredhoward-dev/project-water-management/issues/482);
       engine 1.78.0, model.md §2.4h): the forcing rule's four rules and
       their day-by-day chains, the clamp, the CHIRPS MAP factor's complete
       years and MAP period, a GR4J per land unit and the summed natural flow,
@@ -3881,7 +3874,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       30-water-year run the Water balance table scrolls inside its 70vh box
       and sideways at 1440.
       **Who:** operator (which table is the client's; asked on
-      [#93](https://github.com/Absence0760/project-water-management/issues/93)).
+      [#93](https://github.com/jaredhoward-dev/project-water-management/issues/93)).
       **Trigger:** the next change to the Water account, the Water balance
       section or the Self-checks panel, or a client asking for the table.
       **Done (2026-09-30), the part that doesn't wait on that choice:** on
@@ -5302,34 +5295,29 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ASCII grids with `pnpm import:evaporation --apan-asc`. Written terms
       from the WRC would still settle it: record them in § 3.3e if they
       arrive. Any other provincial surface stays blocked, with its own owner.
-- [ ] **Load the WRC Atlas grids in production** (operator; the client's
+- [x] **Load the WRC Atlas grids in production** (operator; the client's
       request for CCWR's MAP and A-pan grids; deployment.md § Reference
-      datasets, The WRC Atlas grids). The code allows `Lynch-2004` (map-grid)
-      and `Atlas-Apan-2007` (evaporation); nothing is loaded yet. Steps:
-      download the Atlas of Agrohydrology 2008 zip from the Water Research
-      Observatory (free account) and keep it as received under
-      `originals/atlas/`; warp `gmap` and the 12 monthly A-pan grids from
-      the Cape datum to WGS84 at 1′ and write each as ESRI ASCII (maps.md §
-      The evaporation grid gives the GDAL lines). Each loads whole, for the
-      country (the operator, 2026-11-08; `--bbox` only if a smaller area is
-      ever wanted): `pnpm import:map-grid gmap.asc --dataset Lynch-2004
-      --source "Lynch (2004)" --out lynch-2004.json.gz`; `pnpm
-      import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset
-      Atlas-Apan-2007 --out atlas-apan-2007.json.gz` (no `--years`: the
-      Atlas states no period for its A-pan means, issue #755); check the
-      A-pan grids are in mm (a value over 1 000 a month is refused). There
-      is no S-pan load: the Atlas has no S-pan grids (#738 step 1,
-      2026-11-09), so that option was removed (migration 318); the client
-      is still to say which S-pan product they meant (#738). Upload the
-      files to the reference bucket and run `load-reference.yml` for each
-      (`kind=map-grid dataset=Lynch-2004`, `kind=evaporation
-      dataset=Atlas-Apan-2007`, no source). Then, in the app: compare the
-      Lynch grid with the WAAS surface and the typed unit MAPs, and the
-      Atlas A-pan with WR2012's per-quaternary A-pan and any nearby pan
-      station. Also confirm the
-      A-pan section number in WRC Report 1489/1/06 and add it to
-      `ATLAS_APAN_ATTRIBUTION` (geo/evaporationGrid.ts) and
-      `ATLAS_APAN_STATEMENT` (dataCredits.ts) together.
+      datasets, The WRC Atlas grids; issue #755). Done 2026-11-09: the
+      Atlas of Agrohydrology 2008 zip is kept as received under
+      `originals/atlas/` in the reference bucket; `Lynch-2004` (map-grid,
+      `load-reference.yml` run 42652406631) and `Atlas-Apan-2007`
+      (evaporation, run 42724528292, no period: the Atlas states none) are
+      loaded whole, for the country, and the operator checked both in the
+      app (the Map's layers, Demand's CCWR A-pan proposal). There is no
+      S-pan load: the Atlas has no S-pan grids (#738 step 1), so that option
+      was removed (migration 318); the client is still to say which S-pan
+      product they meant (#738).
+- [ ] **Compare the Atlas grids with what the project uses** (the client's
+      hydrologist). Missing: the Lynch (2004) MAP grid against the WAAS
+      surface and the typed unit MAPs, and the Atlas A-pan against WR2012's
+      per-quaternary A-pan and any nearby pan station, so the choice of
+      source is a recorded one. Trigger: before the units' MAP or the A-pan
+      row is switched to an Atlas grid for a reported run.
+- [ ] **Cite the Atlas A-pan's section.** Missing: the section number of WRC
+      Report 1489/1/06 the A-pan grid comes from, in `ATLAS_APAN_ATTRIBUTION`
+      (backend geo/evaporationGrid.ts) and `ATLAS_APAN_STATEMENT`
+      (frontend dataCredits.ts), changed together. Trigger: whoever next has
+      the report open.
 - [ ] **Load the Southwestern Cape MAP surface in production** (operator;
       issue #560; deployment.md § Reference datasets). The code allows it
       as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
@@ -6434,7 +6422,7 @@ Applicant view and the Applications tab. Left:
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
 - [ ] **D1, D2, D3 and D14 are provisional positions** (pre-counsel
-      research, 2026-10-01; [issue #90](https://github.com/Absence0760/project-water-management/issues/90);
+      research, 2026-10-01; [issue #90](https://github.com/jaredhoward-dev/project-water-management/issues/90);
       step-3 § 11; [legal-status.md § Positions taken pending counsel](./legal-status.md#positions-taken-pending-counsel-2026-10-01)),
       built and waiting for the client, the pilot authority and counsel
       (#92): D1 (who decides: the responsible authority, members acting for
@@ -6519,7 +6507,7 @@ Applicant view and the Applications tab. Left:
       `scenarios/oracles.db.test.ts` ("ids and counts"), each with its
       positive control ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 - [ ] **The wording of a value rule refused because of hidden data**
-      ([issue #90](https://github.com/Absence0760/project-water-management/issues/90)).
+      ([issue #90](https://github.com/jaredhoward-dev/project-water-management/issues/90)).
       Built on the recommended default: the applicant is told only "doesn't
       apply to the catchment as modelled" (`MASKED_RULE`), never which rule
       or the hidden values; the assessors, checking the same application,
@@ -6585,7 +6573,7 @@ Applicant view and the Applications tab. Left:
       string (checked 2026-09-30); the pack view's `share.pack` strings went
       through the same round in its own change. The native speaker's review
       is the Afrikaans item above
-      ([#90](https://github.com/Absence0760/project-water-management/issues/90)).
+      ([#90](https://github.com/jaredhoward-dev/project-water-management/issues/90)).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
@@ -7314,7 +7302,7 @@ Left, from the design and the persona review (§11), each with its trigger.
       redefine `app_share_scenario` from its latest body to add the three
       fields, a `share.scenario` i18n round for their headings, and a
       pack-share-style DB test. **Who:** operator, asked on
-      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      [#93](https://github.com/jaredhoward-dev/project-water-management/issues/93).
       **Trigger:** the answer, or the first application shared for public
       comment.
 - [x] **A diagonal draft stamp.** Built: a print-only diagonal *Draft · not
@@ -7647,11 +7635,11 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       production (#92); the "Was this useful?" answers are the evidence.
 ## POPIA and the Step 2 release (WP-2.16)
 
-The questions for the client's information officer are in [issue #90](https://github.com/Absence0760/project-water-management/issues/90)
+The questions for the client's information officer are in [issue #90](https://github.com/jaredhoward-dev/project-water-management/issues/90)
 (§ For the client's information officer), with what each answer changes in
 the code in a comment there; the operator's actions (registering the
 information officer, the signed operator agreement) are the go-live gates in
-[issue #103](https://github.com/Absence0760/project-water-management/issues/103).
+[issue #103](https://github.com/jaredhoward-dev/project-water-management/issues/103).
 Issue #48 closed 2026-09-28 with its engineering done.
 
 The Step 2 release-hardening pass (2026-09-26,
@@ -7811,7 +7799,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       produces. While the account exists, clearing or changing
       `decided_by` is still refused. `auth/account-deletion.db.test.ts`
       covers both.
-- [x] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51)):
+- [x] **Persona verdicts and load checks** ([issue #51](https://github.com/jaredhoward-dev/project-water-management/issues/51)):
       the six personas' verdicts are in step-2 §9 "Build verdicts" (first
       pass 2026-09-28, fixes in #127, #129, #130, #134, #135 and the PR that
       closed #51, re-checked at 81db5ed), and the 60-farm load timings in
@@ -7823,7 +7811,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       every such push is safer but holds a new logger's automatic runs
       until a person runs the model, every day, for months on a dry rain
       record. Who: operator,
-      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      [#93](https://github.com/jaredhoward-dev/project-water-management/issues/93).
       Trigger: before the first gateway key is issued on production.
       **Decided (operator, 2026-10-01): hold auto-publish only (option b),
       keep automatic runs (option a). Done:** a key's push with no outlier
@@ -7837,7 +7825,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       showed "a 20 % cut in registered water use" only when the WUA wrote no
       notice text; the alert email shows both. Make them agree (both, or
       neither). Who: operator,
-      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      [#93](https://github.com/jaredhoward-dev/project-water-management/issues/93).
       **Decided (operator, 2026-10-01): both everywhere**, since the % is the
       WUA's decision and the notice its explanation. **Done:** `noticeCard`
       (farm page) and `shareNotice` (`/share` and its printed member

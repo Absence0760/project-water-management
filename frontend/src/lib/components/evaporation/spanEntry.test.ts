@@ -25,8 +25,9 @@ describe('parseSpanRow', () => {
 
 describe('APAN_SOURCES', () => {
 	it('offers the typed rows, WR2012 and the CCWR grid here and links the stations and any other grid to where they live on Calibration', () => {
-		expect(APAN_SOURCES.map((s) => s.id)).toEqual(['typed', 'wr2012', 'span', 'station', 'ccwr', 'grid']);
-		expect(APAN_SOURCES.find((s) => s.id === 'ccwr')!.label).toBe('CCWR A-pan grid (catchment average)');
+		expect(APAN_SOURCES.map((s) => s.id)).toEqual(['typed', 'wr2012', 'span', 'station', 'ccwr', 'ccwrUnits', 'grid']);
+		expect(APAN_SOURCES.find((s) => s.id === 'ccwr')!.label).toBe('CCWR A-pan (Catchment)');
+		expect(APAN_SOURCES.find((s) => s.id === 'ccwrUnits')!.label).toBe('CCWR A-pan (Hydrological Unit)');
 		expect(APAN_SOURCES.filter((s) => 'href' in s).map((s) => s.id)).toEqual(['station', 'grid']);
 		for (const s of APAN_SOURCES.filter((x) => 'href' in x)) expect(s.href).toMatch(/^\?tab=calibration#set-evaporation/);
 	});

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apanInputOf } from '#lib/model/systems.js';
 	// The Demands grid (Network → Tables → Demands, `grid=demands`, docs/ui.md
 	// § Demands grid): every demand in the catchment, one row each: a unit's
 	// crops, its demand objects in the unit's supply order, each other water
@@ -43,7 +44,7 @@
 		runs?: RunMeta[] | null;
 	} = $props();
 
-	const rows = $derived(demandRows(editor.model, settings.apanMm, settings.februaryDays));
+	const rows = $derived(demandRows(editor.model, apanInputOf(settings, editor.model.nodes), settings.februaryDays));
 	const total = $derived(demandTotal(rows, settings.februaryDays));
 	const shares = $derived(demandShares(rows));
 	const peak = $derived(Math.max(1e-9, ...rows.filter((r) => r.enabled).flatMap((r) => r.monthlyM3Day)));

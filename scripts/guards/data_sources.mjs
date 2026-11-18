@@ -20,6 +20,14 @@
 // An entry of FEED_HOSTS the guard can't read fails too, so a change in its
 // shape is looked at rather than skipped.
 //
+// A feed source's row names the hosts it fetches from, or says explicitly
+// that it has none fixed: a Hosts cell that starts with `user-configured`
+// (USER_CONFIGURED; no backticks) is a source whose URL each feed's owner
+// gives (station_api, issue #784). Its requests go through its own guarded
+// client (backend/src/feeds/stationHttp.ts), never FEED_HOSTS. A source row
+// with neither fails, so a new source can't be registered without saying
+// where it fetches.
+//
 // Run:   node scripts/guards/data_sources.mjs
 // Tests: node --test scripts/guards/data_sources.test.mjs (pnpm test:guards;
 //        it also checks the real tree, which is what CI's guard step runs).
@@ -34,6 +42,8 @@ export const REGISTER = 'docs/data-sources.md';
 export const HTTP = 'backend/src/feeds/http.ts';
 export const CONFIG = 'backend/src/feeds/config.ts';
 export const MIGRATIONS = 'backend/migrations';
+/** How a register row says its hosts are each feed owner's, not fixed (the Hosts cell starts with it). */
+export const USER_CONFIGURED = 'user-configured';
 
 const readAt = (root) => (p) => {
 	const f = join(root, p);
@@ -176,7 +186,8 @@ export function readMigrations(root = ROOT) {
 
 /**
  * The register's summary table: the hosts and feed sources it names, each
- * in backticks in its column. Null when no table has both columns.
+ * in backticks in its column, and per feed source whether its rows name a
+ * host or are marked user-configured. Null when no table has both columns.
  */
 export function registerEntries(markdown) {
 	const lines = markdown.split('\n');
@@ -189,12 +200,20 @@ export function registerEntries(markdown) {
 		if (h < 0 || s < 0) continue;
 		const hosts = new Set();
 		const sources = new Set();
+		/** source → { hosts: number of hosts its rows name, userConfigured } */
+		const sourceRows = new Map();
 		for (let j = i + 2; j < lines.length && lines[j].trim().startsWith('|'); j++) {
 			const row = cells(lines[j]);
-			for (const m of (row[h] ?? '').matchAll(/`([^`]+)`/g)) hosts.add(m[1]);
-			for (const m of (row[s] ?? '').matchAll(/`([^`]+)`/g)) sources.add(m[1]);
+			const rowHosts = [...(row[h] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+			const userConfigured = (row[h] ?? '').toLowerCase().startsWith(USER_CONFIGURED);
+			for (const host of rowHosts) hosts.add(host);
+			for (const m of (row[s] ?? '').matchAll(/`([^`]+)`/g)) {
+				sources.add(m[1]);
+				const was = sourceRows.get(m[1]) ?? { hosts: 0, userConfigured: false };
+				sourceRows.set(m[1], { hosts: was.hosts + rowHosts.length, userConfigured: was.userConfigured || userConfigured });
+			}
 		}
-		return { hosts, sources };
+		return { hosts, sources, sourceRows };
 	}
 	return null;
 }
@@ -212,7 +231,13 @@ export function findProblems({ register, hosts, hostProblems = [], config, migra
 	if (migration === null) problems.push(`no migration under ${MIGRATIONS} sets a CHECK on data_feed.source: point the guard at the constraint's new form`);
 	const sources = new Set([...(config ?? []), ...(migration?.values ?? [])]);
 	for (const source of sources) {
-		if (!entries.sources.has(source)) problems.push(`data_feed.source may be '${source}', but ${REGISTER} has no row naming it (\`${source}\` in the Feed source column)`);
+		if (!entries.sources.has(source)) {
+			problems.push(`data_feed.source may be '${source}', but ${REGISTER} has no row naming it (\`${source}\` in the Feed source column)`);
+			continue;
+		}
+		const row = entries.sourceRows?.get(source);
+		if (row && row.hosts === 0 && !row.userConfigured)
+			problems.push(`${REGISTER}'s row for '${source}' names no host: list the hosts it fetches from in backticks, or start its Hosts cell with "${USER_CONFIGURED}" when each feed's owner gives the URL`);
 	}
 	if (config && migration) {
 		const a = [...config].sort().join(', ');

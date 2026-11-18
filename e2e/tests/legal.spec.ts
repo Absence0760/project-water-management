@@ -199,7 +199,7 @@ test('/methods is prerendered HTML with the engine version, the known limitation
 	// docs/engine-audit.md (B3 is open there; limitations.test.ts pins it).
 	expect(html).toContain('6. Known limitations');
 	expect(html).toMatch(/<td data-label="Item"[^>]*>B3<\/td>/);
-	expect(html).toContain('https://github.com/Absence0760/project-water-management/blob/main/docs/engine-audit.md');
+	expect(html).toContain('https://github.com/jaredhoward-dev/project-water-management/blob/main/docs/engine-audit.md');
 });
 
 test('the trust strip links the methods page, which passes an a11y scan light and dark, on a desktop and a phone', async ({ page }) => {

@@ -5,21 +5,29 @@
 	both offers a "Judged by" switch under the heading; which shows first is river.ts monthsJudge (the reader's pick,
 	else the test the results are judged by). Without a rule table in the run, a line under the daily months says how
 	to judge them by one too (issue #465: the panel was once simply absent). The parent keeps the pick, so the page's
-	menu names the panel as its heading reads (river.ts monthsMetHeading).
+	menu names the panel as its heading reads (river.ts monthsMetHeading). The daily months can be judged at a
+	hydrological unit instead of the outlet ("At", ewr/EwrUnitPick.svelte; ewr/EwrDailyMonthsAt.svelte works them out
+	from the unit's stored series).
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { dailyEwrName } from '#lib/components/ewr/notMet.js';
+	import EwrUnitPick from '#lib/components/ewr/EwrUnitPick.svelte';
+	import { pickedUnit, unitChoices } from '#lib/components/ewr/unitMonths.js';
 	import { RESERVE_MONTHS_HEADING, type MonthsJudge } from './river';
 
 	let {
+		projectId,
+		runId,
 		summary,
 		judge,
 		onjudge,
 		stub
 	}: {
-		summary: Pick<RunSummary, 'ewrDailyMonths' | 'ewrAssurance' | 'catchment' | 'ewrCompliance' | 'allocations'>;
+		projectId: string;
+		runId: string;
+		summary: Pick<RunSummary, 'ewrDailyMonths' | 'ewrAssurance' | 'catchment' | 'ewrCompliance' | 'allocations' | 'unitEwr' | 'historyDays'>;
 		/** What it shows (river.ts monthsJudge). */
 		judge: MonthsJudge;
 		/** The reader picked the other judgement. */
@@ -30,8 +38,12 @@
 
 	const uid = $props.id();
 	const loadAssurancePanel = () => import('#lib/components/runs/EwrAssurancePanel.svelte');
-	const loadDailyMonths = () => import('#lib/components/ewr/EwrDailyMonthsPanel.svelte');
+	const loadDailyMonths = () => import('#lib/components/ewr/EwrDailyMonthsAt.svelte');
 	const hasRules = $derived(!!summary.ewrAssurance?.length);
+	// The unit the daily months are judged at (null: the outlet); the parent keys this component on the run.
+	let at = $state<string | null>(null);
+	const choices = $derived(unitChoices(summary));
+	const unit = $derived(pickedUnit(choices, at));
 	const dailyLabel = $derived.by(() => {
 		const name = dailyEwrName(summary.catchment.outletEwr).replace(/^the /, '');
 		return `${name[0]!.toUpperCase()}${name.slice(1)}`;
@@ -50,6 +62,11 @@
 	{/if}
 {/snippet}
 
+{#snippet dailyControls()}
+	{@render controls()}
+	<EwrUnitPick {choices} value={unit?.nodeId ?? null} onpick={(id) => (at = id)} />
+{/snippet}
+
 {#if judge === 'rules' && hasRules}
 	<Lazy load={loadAssurancePanel}>
 		{#snippet children(EwrAssurancePanel)}
@@ -58,8 +75,8 @@
 	</Lazy>
 {:else}
 	<Lazy load={loadDailyMonths}>
-		{#snippet children(EwrDailyMonthsPanel)}
-			<EwrDailyMonthsPanel {summary} {controls} />
+		{#snippet children(EwrDailyMonthsAt)}
+			<EwrDailyMonthsAt {projectId} {runId} {summary} {unit} controls={dailyControls} />
 		{/snippet}
 	</Lazy>
 	{#if !hasRules}

@@ -15,6 +15,7 @@
 //      history covers, `exempt: '<why>'`.
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, confirmAsOperator, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
@@ -29,6 +30,7 @@ import { fixtureLonLat, OUTLET_CELL, valleyUnitRing } from '../delineation/fixtu
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
+import { replaceEvaporationDataset } from '../geo/evaporationGrid.js';
 import { splitHalves } from '../__tests__/routeSamples.js';
 import { base32Decode, totp } from '../auth/totp.js';
 
@@ -798,6 +800,29 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
 			return c.owner.call('POST', `${at(c)}/map/unit-map`, { dataset: 'synthetic', nodeIds: [c.farmId] });
+		}
+	},
+	{
+		// Each unit's own A-pan from an A-pan grid (engine 1.117.0): one settings revision citing the grid. An invented A-pan
+		// grid under Farm A's area parcel (map/import, above; 0.01° cells), removed again so no later case sees it.
+		route: `POST ${P}/map/unit-apan`,
+		records: ['revision'],
+		call: async (c) => {
+			const cells: { row: number; col: number; monthlyMm: number[] }[] = [];
+			for (let row = -3372; row < -3366; row++) for (let col = 2128; col < 2134; col++) cells.push({ row, col, monthlyMm: [150, 180, 210, 220, 190, 160, 110, 80, 60, 60, 80, 110] });
+			const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+			await client.connect();
+			try {
+				await replaceEvaporationDataset(
+					client,
+					{ dataset: 'guard-apan', kind: 'apan', source: 'Invented A-pan grid', version: '1', attribution: 'test', method: 'test' },
+					{ cellDeg: 0.01, originLon: 0, originLat: 0, firstYear: null, lastYear: null, cells, partial: 0 }
+				);
+				return await c.owner.call('POST', `${at(c)}/map/unit-apan`, { dataset: 'guard-apan' });
+			} finally {
+				await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', ['guard-apan']);
+				await client.end();
+			}
 		}
 	},
 	{

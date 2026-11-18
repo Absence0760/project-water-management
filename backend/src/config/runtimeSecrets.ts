@@ -45,10 +45,29 @@ export const RUNTIME_SECRETS: Record<Role, readonly string[]> = {
 	// download-signing or TOTP keys: it serves no report or sign-in route. No
 	// model key either: it calls Bedrock with its role's IAM permission.
 	assistant: ['AUTH_JWT_SECRET', 'DATABASE_URL', 'CLOUDFRONT_SHARED_SECRET'],
-	// No secrets: no database, no session (feeds.tf, reports.tf).
-	fetcher: [],
+	// The key that opens station API feed credentials (feeds/credential.ts,
+	// issue #784): the fetcher alone opens them, and only while station API
+	// feeds are on (runtimeSecretKeys below; infra/secrets.tf creates its
+	// secret only then). Still no database and no session (feeds.tf).
+	fetcher: ['FEED_CREDENTIAL_PRIVATE_KEY'],
+	// No secrets: no database, no session (reports.tf).
 	renderer: []
 };
+
+/**
+ * Keys a role's secret holds only under a switch: the fetcher's private key
+ * only with STATION_API_FEEDS=on (Terraform var.station_api_feeds), so a
+ * deployment without station API feeds has no fetcher secret to create, read
+ * or rotate, and its fetcher reads nothing at cold start.
+ */
+const ONLY_WHEN: Record<string, (env: Env) => boolean> = {
+	FEED_CREDENTIAL_PRIVATE_KEY: (env) => env.STATION_API_FEEDS?.trim() === 'on'
+};
+
+/** The keys `role`'s secret holds in `env`: RUNTIME_SECRETS[role], less any whose switch is off. */
+export function runtimeSecretKeys(role: Role, env: Env = process.env): readonly string[] {
+	return RUNTIME_SECRETS[role].filter((k) => ONLY_WHEN[k]?.(env) ?? true);
+}
 
 type Env = Record<string, string | undefined>;
 type Fetch = (secretId: string, versionId?: string) => Promise<string>;
@@ -61,10 +80,12 @@ export class RuntimeSecretError extends Error {
 
 /**
  * Put `role`'s runtime secrets in `env` (process.env by default). Off Lambda
- * (no AWS_LAMBDA_FUNCTION_NAME) and for a role with no secrets it does nothing.
+ * (no AWS_LAMBDA_FUNCTION_NAME) and for a role with no secrets (in this env:
+ * runtimeSecretKeys) it does nothing; the config check (config/production.ts)
+ * then refuses a switched-off key that is set anyway.
  */
 export async function loadRuntimeSecrets(role: Role, env: Env = process.env, fetch: Fetch = getSecretString): Promise<void> {
-	const keys = RUNTIME_SECRETS[role];
+	const keys = runtimeSecretKeys(role, env);
 	if (!env.AWS_LAMBDA_FUNCTION_NAME || keys.length === 0) return;
 	const fail = (problem: string, cause?: unknown) => new RuntimeSecretError(`refusing to start the ${role} Lambda: its runtime secret ${problem}`, cause ? { cause } : undefined);
 

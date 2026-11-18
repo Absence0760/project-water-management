@@ -274,7 +274,7 @@ parameters a scenario changed. A reversed window in the headline's row is
 refused as the top level's is (`structure.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
-`effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
+`effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `apanBasis` (engine ≥ 1.117.0: `'catchment'`, `'units'` or null, which A-pan each unit runs on, [model.md §2.3b](./model.md)), `panCoefficient`,
 `ewrPragmaticM3PerDay`,
 `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
@@ -565,6 +565,12 @@ sensitivity (§2.10g) scales with the rest.
   `panCoefficient` or a monthly `pe` row), changed with `settings.set`. On a
   project with a daily A-pan series they reach only the days the series
   doesn't cover, so an evaporation scenario there scales the series too.
+  Under CCWR A-pan (Hydrological Unit) (`apanBasis` `'units'`, engine ≥
+  1.117.0, [model.md §2.3b](./model.md)) the row isn't read: a new
+  `apanMm` scales every unit's own row by the factor it puts on the
+  catchment row (the covered units' area-weighted mean), month by month,
+  and the run's notes say so; scaling `evap_apan_mm` is refused, since no
+  unit reads it then.
 - Observed and logger flow are measurements the run is *scored against*,
   not drivers: scaling them would change the calibration statistics and the
   EWR agreement, never the simulated water. Not scalable.
@@ -708,7 +714,8 @@ alone. Each day's reading is multiplied by the factor of its calendar month:
   rainfall station's record and its CHIRPS (§2.4i), and the reference
   unit's CHIRPS cell.
 - **Evaporation**: the daily A-pan `evap_apan_mm` and reference ET
-  `evap_et0_mm`; the A-pan row `apanMm` and a monthly PE row `pe.mm` month
+  `evap_et0_mm`; the A-pan row `apanMm`, each unit's own A-pan row
+  (`apanUnits`, engine ≥ 1.117.0) and a monthly PE row `pe.mm` month
   by month (their water-year months matched to the calendar months).
   The pan coefficient is not changed: PE moves with the A-pan.
 - **MAPs**: each land unit's `mapMm`, `unitRain.gaugeMapMm`,

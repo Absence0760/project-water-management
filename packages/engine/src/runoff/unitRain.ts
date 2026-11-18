@@ -707,11 +707,15 @@ export function unitRainForcing(
 	return { units, recipes, reference: fit.reference, stations: stationForcings, stationContext: ctx.stations ?? null };
 }
 
-/** GR4J over each unit's forcing (one parameter set, or each unit's zone's, and the catchment PE); the per-unit simulateRunoff traces, in `units` order. */
+/**
+ * GR4J over each unit's forcing (one parameter set, or each unit's zone's, and the catchment PE, or each unit's own
+ * under the A-pan per hydro unit, engine ≥ 1.117.0: one array per unit in `units` order); the per-unit simulateRunoff
+ * traces, in `units` order.
+ */
 export function simulateUnits(
 	units: readonly Pick<UnitForcing, 'nodeId' | 'rainMm'>[],
 	p: Gr4jParams,
-	petMm: Float64Array,
+	petMm: Float64Array | readonly Float64Array[],
 	opts: {
 		warmupDays: number;
 		trace?: boolean;
@@ -723,10 +727,10 @@ export function simulateUnits(
 		paramsOf?: (unitId: string) => Gr4jParams;
 	}
 ): RunoffTrace[] {
-	return units.map((u) => {
+	return units.map((u, k) => {
 		const init = opts.initial?.find((x) => x.id === u.nodeId);
 		if (opts.initial && !init) throw new Error(`the snapshot holds no runoff state for the unit ${u.nodeId}`);
-		const forcing: RunoffForcing = { rainMm: u.rainMm, petMm };
+		const forcing: RunoffForcing = { rainMm: u.rainMm, petMm: petMm instanceof Float64Array ? petMm : petMm[k]! };
 		return simulateRunoff(gr4j, opts.paramsOf ? opts.paramsOf(u.nodeId) : p, forcing, {
 			warmupDays: opts.warmupDays,
 			...(opts.trace !== undefined ? { trace: opts.trace } : {}),
@@ -747,7 +751,7 @@ export function unitRainSummary(
 	u: UnitRainSettings,
 	units: readonly UnitForcing[],
 	traces: readonly RunoffTrace[],
-	petMm: Float64Array,
+	petMm: Float64Array | readonly Float64Array[],
 	reference?: UnitRainReferenceFit | null,
 	zones?: { assignment: LocationAssignment; base: Gr4jParams } | null
 ): UnitRainSummary {
@@ -756,7 +760,14 @@ export function unitRainSummary(
 		for (let t = 0; t < a.length; t++) s += a[t]!;
 		return s;
 	};
-	const petTotal = sum(petMm);
+	// Each unit's PE total: the catchment PE's, or its own under the A-pan per hydro unit (engine ≥ 1.117.0).
+	const totals = new Map<Float64Array, number>();
+	const petTotal = (k: number) => {
+		const x = petMm instanceof Float64Array ? petMm : petMm[k]!;
+		let v = totals.get(x);
+		if (v === undefined) totals.set(x, (v = sum(x)));
+		return v;
+	};
 	return {
 		mode: 'perUnit',
 		gaugeMapMm: usableMap(u.gaugeMapMm),
@@ -797,7 +808,7 @@ export function unitRainSummary(
 				...(r.chirpsChoice ? { chirpsChoice: r.chirpsChoice } : {}),
 				days,
 				rainMm,
-				petMm: petTotal,
+				petMm: petTotal(k),
 				aetMm: sum(tr.aetMm),
 				flowMm,
 				exchangeMm: sum(tr.exchangeMm),

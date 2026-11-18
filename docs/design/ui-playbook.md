@@ -1418,6 +1418,15 @@ Interaction details that bit:
 - **A sticky element inside a scroll container covers controls** as they
   scroll, and axe fails the covered ones (target size). Put a picker in the
   Dialog `subhead` instead.
+- **A box that scrolls must fit above a bar pinned at the window's foot.**
+  Scenario override mode's sticky "Edits to record" (up to 50vh) sat over the
+  node table's 70vh `.table-wrap`, so no scroll position showed the box's foot,
+  and a mouse had no sideways scrollbar to reach (2026-11-09). Measure the bar
+  (`bind:offsetHeight`) and lower the box's cap through `--table-wrap-max`
+  (app.css), less `--dock-h` for the save bar; pin the bar itself at
+  `bottom: var(--dock-h, 0px)`, not under the save bar. And a sticky header
+  sits above the rows' sticky name cells (`table.data thead` z-index 3 over
+  their 1–2), or the rows paint over it as the box scrolls down.
 - **Closing an overlay drops its param with goto's `replace`**, so Back
   closes the overlay rather than leaving the page. A create dialog
   (Scenarios' `new=1`) that navigates on success lets the URL close it: drop
@@ -2341,7 +2350,23 @@ Interaction details that bit:
   Svelte scopes a caller's `.words .rule` to elements the caller writes, so
   once the `<details class="words">` was `Fold`'s, the rule stopped matching.
   Reach the child's element with `:global(.words) .rule` (and a class prop
-  on the component), and look at a screenshot after any extraction.
+  on the component), and look at a screenshot after any extraction. A lazy
+  form chunk is the same: Data feeds' `.add select { max-width: 100% }`
+  never reached the station API form (`feeds/StationApiFeedForm.svelte`),
+  so its time-format select pushed a 390 px phone 115 px sideways until the
+  form got its own `.field` and `select` rules (issue #784;
+  `station-api-feed.spec.ts` checks the phone has no sideways scroll).
+- **A server's refusal lands on the field it names, like the form's own
+  checks.** The API answers a body it can't take with 400 and zod `details`
+  (each issue's `path` in the body); shown raw it read "Invalid request
+  (config.url: …)" at the foot of a 1,500 px form, with nothing marked. Map
+  the first issue's path to the field (`feeds/stationApi.ts`
+  `stationServerProblem`), say its message as a sentence under that field,
+  mark it `aria-invalid` and focus it, opening its fold; keep the card's
+  error line for refusals that name no field (a cap, a feature switched
+  off). Write a long form's error under its field, not at the form's foot,
+  and check its problems in the form's order so the first one is the first
+  field to fix.
 - **A `NumberInput` that isn't `nullable` never reaches `null`.** Cleared or
   given text it can't read, it keeps the last number and marks itself
   `aria-invalid` with its own message, so a check written against `null`

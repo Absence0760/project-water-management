@@ -1,0 +1,4 @@
+{
+	"addKb": 17,
+	"why": "Issue #784: the weather station API feed's attach form, its own lazy chunk (StationApiFeedForm + stationApi.ts helpers + the engine's station-format reader for Try it on a sample, 14.9 KB gzip), and the panel's key line and Replace key form in DataFeedsPanel/feeds.ts (~2 KB). Measured total 2502 KB against 2485 KB."
+}

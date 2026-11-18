@@ -40,6 +40,8 @@ export interface RunNetwork {
 	crops?: readonly CropDef[];
 	cropAreas?: readonly CropArea[];
 	apanMm?: readonly number[];
+	/** Each unit's own A-pan row the run read (engine ≥ 1.117.0, the engine's runApanRows); null = every unit on `apanMm`. */
+	apanUnits?: { units: Readonly<Record<string, readonly number[]>> } | null;
 	/** The snapshot's demand objects (engine ≥ 1.7.0): a unit with one is curtailed on the consumptive share its return flow gives. */
 	demandObjects?: readonly DemandObject[];
 }
@@ -78,7 +80,7 @@ export function prepareWindowed(run: { startDate: string; endDate: string }, net
 		endDate: run.endDate,
 		nodes: network.nodes,
 		transfers: network.transfers,
-		...(network.crops && network.cropAreas ? { crops: network.crops, cropAreas: network.cropAreas, apanMm: network.apanMm ?? [] } : {}),
+		...(network.crops && network.cropAreas ? { crops: network.crops, cropAreas: network.cropAreas, apanMm: network.apanMm ?? [], apanUnits: network.apanUnits ?? null } : {}),
 		...(network.demandObjects?.length ? { demandObjects: network.demandObjects } : {}),
 		series: get
 	});

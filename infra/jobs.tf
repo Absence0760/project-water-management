@@ -204,6 +204,11 @@ resource "aws_lambda_function" "worker" {
         # loads what the pass fetched (feeds.tf, DWS_WEEKLY).
         DWS_SOURCE = var.dws_source
         DWS_WEEKLY = var.dws_weekly_enabled ? "on" : "off"
+        # Station API feeds (issue #784): on keeps FEED_FETCHER=sqs after the
+        # cutover (feeds.tf local.per_feed_fetching). The worker forwards each
+        # feed's sealed credential to the fetcher unopened: it never holds the
+        # key that opens one (secrets.tf).
+        STATION_API_FEEDS = var.station_api_feeds ? "on" : "off"
         # The dams tick (issue #604 R5, dam_observations.tf): matches traced dams,
         # writes dams/wanted.json and loads what the passes fetched.
         DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"
@@ -245,10 +250,16 @@ resource "aws_lambda_function" "worker" {
         DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
       },
       # Per-feed fetching (feeds.tf local.per_feed_fetching): until CHIRPS reads
-      # the copy and DWS the store, a CHC or DWS fetch goes to the fetcher.
+      # the copy and DWS the store, a CHC or DWS fetch goes to the fetcher, and
+      # a station API feed's always does.
       local.per_feed_fetching ? {
         FEED_FETCHER             = "sqs"
         FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.fetch_requests[*].url)
+      } : {},
+      # Station API feeds' own fetch queue (feeds.tf, "Station fetches apart"):
+      # their fetches never share fetch-requests or its trigger with CHC's and DWS's.
+      var.station_api_feeds ? {
+        STATION_FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.station_fetch_requests[*].url)
       } : {}
     )
   }
@@ -258,6 +269,7 @@ resource "aws_lambda_function" "worker" {
     aws_iam_role_policy.lambda_logs["worker"],
     aws_iam_role_policy.lambda_vpc_eni["worker"],
     aws_iam_role_policy.worker_lambda,
+    aws_iam_role_policy.worker_station_queue,
     aws_iam_role_policy.worker_dem,
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
@@ -454,6 +466,20 @@ data "aws_iam_policy_document" "sqs_endpoint" {
     for_each = aws_sqs_queue.fetch_requests
     content {
       sid       = "WorkerSendsFetchRequests"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value.arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.worker_lambda.arn]
+      }
+    }
+  }
+
+  # Station API feeds' own fetch queue, while they are on (feeds.tf).
+  dynamic "statement" {
+    for_each = aws_sqs_queue.station_fetch_requests
+    content {
+      sid       = "WorkerSendsStationFetchRequests"
       actions   = ["sqs:SendMessage"]
       resources = [statement.value.arn]
       principals {

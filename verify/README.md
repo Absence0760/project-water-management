@@ -465,6 +465,17 @@ the model one feature at a time, each written from its docs/model.md
 section, from its own random stream in the generator (so every other draw
 of a seed is unchanged), with probes and mutants:
 
+- **Each unit's own A-pan** (§2.3b, engine ≥ 1.117.0; `generate.py`
+  `add_apan_units`, a quarter of the random networks and half the dense
+  ones; `model.py` `apan_units_of`): under `apanBasis` `"units"` a land
+  unit with a row in `apanUnits` reads it for its crops' gross demand and
+  irrigation-system weighting, its dam's evaporation and its GR4J PE (pan
+  coefficient × its month ÷ the month's days, not under a monthly PE row);
+  everything else, a land unit without a row and a dam on a farm with no
+  land among them, reads the covered units' rows area-weighted in node-id
+  order, and the catchment's `pet` column is the units' PE area-weighted.
+  The daily A-pan record isn't read. Rows for nodes that aren't land units
+  are ignored, and the catchment basis with rows stored changes nothing.
 - **The daily A-pan record** (§2.3a, engine ≥ 0.38.0; `generate.py`
   `add_apan_daily`, a quarter of the random networks and most dense ones):
   on a day `evap_apan_mm` has a value ≥ 0 the crops' gross demand is

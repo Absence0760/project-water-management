@@ -174,7 +174,7 @@ private estate repo, one file per project; copy it from the templates repo's
 commit and push it there: the script refuses an unsaved one, and it is the
 only record of the account's root email, which AWS never lets you change or
 reuse. Set `github_subject_prefix` to what
-`gh api repos/Absence0760/project-water-management/actions/oidc/customization/sub --jq .sub_claim_prefix`
+`gh api repos/jaredhoward-dev/project-water-management/actions/oidc/customization/sub --jq .sub_claim_prefix`
 prints, never to `repo:<owner>/<repo>`: this repo is on GitHub's immutable
 subject claims, so its OIDC subject carries numeric IDs, and a slug-form
 prefix leaves every deploy failing to assume the role
@@ -245,7 +245,7 @@ Estate runbook: `~/github/project-mgmt/docs/runbooks.md`.
 ## 2. Secrets (one-time, then as needed)
 
 **This repo is public.** Production secrets live **only** in the private
-`Absence0760/infra-secrets` repo, at `water-management/prod.sops.yaml`,
+`jaredhoward-dev/infra-secrets` repo, at `water-management/prod.sops.yaml`,
 encrypted under `alias/water-management-sops`. They are never in this repo,
 encrypted or not, and never in Terraform state or a saved plan either.
 Terraform gets them through `infra/scripts/tf.sh`, which runs it under
@@ -267,7 +267,8 @@ Keys this app needs:
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
 | `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links and the "Was this useful?" links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent, and the feedback links of the last 30 days |
 | `app_encryption_key` | `APP_ENCRYPTION_KEY` in the API's runtime secret: seals two-step sign-in's TOTP secrets at rest (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it voids every authenticator ([§ Runbooks](#runbooks) 15) |
-| `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
+| `feed_credential_private_key` | Optional, only with `station_api_feeds = true`: `FEED_CREDENTIAL_PRIVATE_KEY` in the fetcher's runtime secret, which opens the keys owners save for station API feeds (43 base64url characters from `pnpm gen:feed-credential-key`, whose public half goes in `prod.tfvars.sops` as `feed_credential_public_key`). Rotating it voids every saved station key ([§ Station API feeds](#station-api-feeds)) |
+| `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars.sops` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
 key: the owner/migration role always uses RDS-managed master credentials in
@@ -327,7 +328,7 @@ until it has).
 
 The API signs report download links with `cloudfront_private_key` (sops);
 CloudFront trusts the public keys in `report_download_public_keys`
-(`prod.tfvars`, name → PEM) through one key group, and
+(`prod.tfvars.sops`, name → PEM) through one key group, and
 `report_download_signing_key` names the entry the private key belongs to.
 First setup, and every rotation, generate the pair outside any repo:
 
@@ -335,7 +336,8 @@ First setup, and every rotation, generate the pair outside any repo:
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out report-downloads.key && openssl pkey -in report-downloads.key -pubout
 ```
 
-The second command prints the public key for `prod.tfvars`; the private key
+The second command prints the public key for `prod.tfvars.sops`
+(`AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`); the private key
 goes into sops as `cloudfront_private_key` (a YAML block scalar), then delete
 `report-downloads.key`. To rotate without a single failed download, overlap
 the two keys:
@@ -498,7 +500,9 @@ Fill in `backend.config` (the tfstate bucket) and `terraform.tfvars`:
 `water-management.jaredhoward.com`; `{}` once retired),
 `bootstrap_slug = "water-management"`, the region, the budget
 email and the DMARC report mailbox. Both files are gitignored (the estate
-keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
+keeps the canonical tfvars sops-encrypted in `infra-secrets/water-management/prod.tfvars.sops`;
+edit it with `AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`, and pass the `.sops` file itself as the var file to
+`scripts/tf.sh` and the check scripts, which decrypt it to a private temporary copy).
 
 Before the first plan, run the read-only pre-apply check (the Lambda
 concurrency quota against the reservations, the state bucket and sops key in
@@ -508,7 +512,7 @@ the database KMS key alarm needs; PASS/FAIL per check, exit 1 on any FAIL;
 infra/README.md § Operator steps, step 7a):
 
 ```bash
-cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops
 ```
 
 ```bash
@@ -600,7 +604,7 @@ without the shared secret (infra/README.md § Operator steps, steps 8, 10a
 and 10c; `--rds-event-test` proves RDS events reach the topic):
 
 ```bash
-cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops
 ```
 
 While `redirect_domains` holds a former hostname, add `--redirect-from <host>`
@@ -791,7 +795,7 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `ci.yml` `renderer-image` | `bin/check-renderer-image.sh`: the release's own `docker buildx build` of the renderer image (one `linux/amd64` manifest, no attestations, which Lambda requires), then the Lambda smoke test, so a broken Dockerfile fails here and not at release |
 | `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |
 | `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy config scan of Terraform and the renderer Dockerfile (advisory: HIGH/CRITICAL findings go to the Security tab, never fail the job; accepted ones in [security.md § Accepted IaC findings](./security.md#accepted-iac-findings)) |
-| `ci.yml` `gitleaks` → `gitleaks.yml` | secret scan; runs on docs-only diffs too |
+| `ci.yml` `secret-scan` → `secret-scan.yml` | TruffleHog secret scan; a verified or unknown finding fails it, unverified ones only warn; runs on docs-only diffs too |
 | `ci.yml` `ci-gate` | **the one required check**: fails if any job above failed |
 | `compliance-drift.yml` | only when migrations, `backend/src`, `frontend/src`, a `package.json` or the two docs change; advisory: personal-data columns, outside hosts or telemetry SDKs added without the matching `docs/data-model.md` / `docs/security.md` change (`pnpm check:compliance`) |
 | `security.yml` | CodeQL (JS/TS + Actions) |
@@ -813,7 +817,7 @@ becomes a required check on `main`.
 
 Scheduled: `audit.yml` (weekly `pnpm audit` against the lockfile, with no
 install and no cache; opens an issue),
-`gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
+`secret-scan-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
 issue when it fails), `renderer-apt-snapshot.yml` (weekly age check of the
 renderer image's apt snapshot; opens a `renderer-apt-snapshot` issue past 90
 days, § Reports), `fresh-clone.yml` (weekly `pnpm run setup && pnpm dev` on a
@@ -1216,23 +1220,23 @@ line:
    (self-review allowed: there is one operator):
 
    ```bash
-   gh api -X PUT repos/Absence0760/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
+   gh api -X PUT repos/jaredhoward-dev/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
    ```
 
 2. Allow exactly `main` and the two release tag patterns (a manual rollback
    run is dispatched from `main`; a release event runs on its tag):
 
    ```bash
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
    ```
 
 3. Protect the release tags: only a repository admin (you, bypassing through
    `gh release create`) can create them, and nobody can move or delete one:
 
    ```bash
-   gh api -X POST repos/Absence0760/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
+   gh api -X POST repos/jaredhoward-dev/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
    ```
 
 4. Check. The first should print `{"custom_branch_policies":true,"protected_branches":false}`
@@ -1240,9 +1244,9 @@ line:
    ruleset as `active`:
 
    ```bash
-   gh api repos/Absence0760/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
-   gh api repos/Absence0760/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
-   gh api repos/Absence0760/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
+   gh api repos/jaredhoward-dev/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
+   gh api repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+   gh api repos/jaredhoward-dev/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
    ```
 
 The preflight reads these with the workflow's own token (`actions: read` for
@@ -1402,7 +1406,9 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 - **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
   `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
   access, which is what keeps the feeds from needing a NAT), 512 MB, 900 s,
-  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`,
+  reserved concurrency `fetcher_reserved_concurrency` (2; plus 2 for station
+  API feeds' own trigger while `station_api_feeds` is on, [§ Station API
+  feeds](#station-api-feeds)). `FEED_SOURCE=live`,
   and `FEEDS_CONTACT` from `feeds_contact` (required; the contact in its user
   agent, which CHC asked for). It reads CHC one file at a time, about one
   request a second, and answers a long backfill window with the days it
@@ -1526,8 +1532,10 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 
 The CHIRPS feeds were switched off on 2026-10-25 (#571) after CHC's bot
 protection blocked the fetcher's addresses. CHC wrote back on 2026-10-27:
-their limits are per public address (a block for hours above about 2
-requests a second, HTTP 429 past 20 open connections), and they asked for
+a block for hours above about 2 requests a second from one address, and
+HTTP 429 past 20 open connections (on 2026-11-10 they said that cap was in
+fact shared by all addresses, and replaced it with per-address limits;
+[data-sources.md § chirps](./data-sources.md#chirps)), and they asked for
 one file at a time, about one request a second in total across our Lambdas,
 and a contact email in the user agent. The fetcher now does all three
 ([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)).
@@ -1823,9 +1831,13 @@ yesterday's issue held, so the forecast feeds reading the copy wait, keeping
 the forecast they have) on two days running, or when no datapoint arrives
 for two days. Runbook: the run's log line; a `refused` stopped on purpose
 (as above); `partial` on several runs means CHC is publishing late; a
-`throttled` (HTTP 429) on run after run, often after only a few requests,
-means CHC is limiting the address we leave from, which is the shared Lambda
-address unless the fixed egress is on (§ Fixed egress, below). It is
+`throttled` (HTTP 429) is logged only once the pass's retries (up to 3,
+`Retry-After` else 60 s doubling, while its time allows) are spent; each
+429 shows as a `mirror_ingest_throttled` line with its attempt and
+`Retry-After`. If 429s go on run after run, tell CHC
+(chc-help@geog.ucsb.edu) with the times: they asked to hear if they
+continue after their per-address limits of 2026-11-10
+([data-sources.md § chirps](./data-sources.md#chirps)). It is
 turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
 target and permission, and the alarm exist only then.
 
@@ -1837,17 +1849,23 @@ instance with one Elastic IP (`infra/egress.tf`, `infra/modules/fixed-egress/`).
 Off, both run outside any VPC and reach the internet from AWS's shared Lambda
 addresses.
 
-- **Why.** CHC limits by public address: its bot protection blocks one for
-  hours above about 2 requests a second, and answers HTTP 429 past 20 open
-  connections (§ Data feeds, its reply of 2026-10-27). A Lambda outside a VPC
-  shares its address with other accounts' functions, so someone else's
-  crawler can get ours throttled however politely we ask. From 2026-11-05 to
-  11-08 the GEFS pass met HTTP 429 on 15 of 16 runs, after 1 to 6 requests,
-  and the 03:00 preliminary pass on its first request, while our whole
-  traffic to CHC was a few dozen requests a day and the same requests
-  succeeded from elsewhere. One address of our own takes other accounts out
-  of it, and gives CHC one address to recognise (and, if they will,
-  allowlist).
+- **Why.** CHC's bot protection blocks a public address for hours above
+  about 2 requests a second (§ Data feeds, its reply of 2026-10-27). A
+  Lambda outside a VPC shares its address with other accounts' functions, so
+  someone else's crawler could get ours blocked however politely we ask.
+  From 2026-11-05 to 11-08 the GEFS pass met HTTP 429 on 15 of 16 runs,
+  after 1 to 6 requests, and the 03:00 preliminary pass on its first
+  request, while our whole traffic to CHC was a few dozen requests a day.
+  We took that for other accounts on the shared address; CHC's reply of
+  2026-11-10 says it wasn't: the 429s came from a cap on concurrent heavy
+  downloads shared by all addresses on their side (their October word that
+  the limits were per address was wrong), which they replaced that day with
+  per-address limits, and our address is not blocked
+  ([data-sources.md § chirps](./data-sources.md#chirps)). One address of
+  our own still takes other accounts' traffic out of any per-address limit,
+  and gives CHC one address to recognise (and, if they decide to,
+  allowlist); the passes now also retry a 429 (§ Data feeds → Throttling in
+  architecture.md).
 - **Shape.** A separate VPC (`10.61.0.0/16`, `fixed_egress_vpc_cidr`), never
   peered with the private one, so neither Lambda gains a path to the
   database and the private VPC keeps its no-internet guarantee and its
@@ -1893,7 +1911,7 @@ addresses.
 - **Cost.** About $13 a month in af-south-1: the instance, the Elastic IP's
   public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
 - **Turning it on takes two applies.** Set `fixed_egress_enabled = true` in
-  the prod tfvars (`infra-secrets/water-management/prod.tfvars`), then:
+  the prod tfvars (`infra-secrets/water-management/prod.tfvars.sops`), then:
   1. `scripts/tf.sh plan -target=module.fixed_egress …` and apply it: the
      egress VPC and NAT instance only (24 resources).
   2. A plain plan and apply (§ Runbooks, `scripts/tf.sh`): both Lambdas
@@ -1918,7 +1936,7 @@ addresses.
   reboot, and Terraform ignores newer AMIs so an unrelated apply never
   replaces the instance. Every few months (or for a kernel advisory), replace
   it on purpose:
-  `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace='module.fixed_egress[0].aws_instance.nat'`
+  `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops -replace='module.fixed_egress[0].aws_instance.nat'`
   (review the plan it shows: only the instance is replaced).
   The address stays (the Elastic IP moves to the new instance); outbound calls stop for the minute or two the
   new instance takes to boot, so do it outside 02:00–03:30 and 08:30–12:00
@@ -2654,10 +2672,10 @@ The operator, once:
    then replace the model or pin its variant in `ingest/cmip6_delta.py`
    `MODELS` **and** in docs/data-sources.md § nex-gddp-cmip6, through a PR.
 2. **Open CloudShell in us-west-2** (the console's region picker, then the
-   CloudShell icon) and get the checkout and Python 3.14 (CloudShell's own
+   CloudShell icon) and get the checkout and Python 3.15 (CloudShell's own
    Python is older). uv's installer is a shell script from astral.sh that
    puts `uv` in `~/.local/bin`; read it first if you prefer:
-   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/Absence0760/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.15 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
+   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/jaredhoward-dev/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.15 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
    (in `/tmp`, since the home directory holds 1 GB).
 3. **Copy one model at a time:**
    `cd /tmp/wm && AWS_REGION=af-south-1 AWS_DEFAULT_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 copy --source s3 --models ACCESS-CM2`
@@ -3152,6 +3170,113 @@ fires if the copy falls behind, and outlooks keep reading the last copy,
 stepping back at most two months. Turning it off stops the copy; the files
 stay in the bucket.
 
+## Station API feeds
+
+A rainfall station's readings fetched from its provider's own web API, set
+up by a project's owner (issue #784; [security.md § Station API
+feeds](./security.md#station-api-feeds), [data-sources.md §
+station-api](./data-sources.md#station-api)). Off in production
+(`station_api_feeds = false`, the default): the attach route refuses the
+source and nothing below exists.
+
+What `station_api_feeds = true` changes (`infra/feeds.tf`, `secrets.tf`,
+`lambda.tf`, `jobs.tf`):
+
+- `STATION_API_FEEDS=on` on the API, the worker and the fetcher, and
+  `FEED_CREDENTIAL_PUBLIC_KEY` (`feed_credential_public_key`) on the API,
+  which seals each saved key with it, and on the fetcher.
+- The fetcher gets its own runtime secret, `water-management/runtime/fetcher`,
+  holding `FEED_CREDENTIAL_PRIVATE_KEY` (sops `feed_credential_private_key`),
+  with `secretsmanager:GetSecretValue` on that secret alone, and reads it at
+  cold start. Neither the API nor the worker can read it.
+- Per-feed fetching stays on whatever `chirps_source` and `dws_source` say
+  (`local.per_feed_fetching`): a station's own API can't be read from our
+  copy, so the `fetch-requests` and `ingest-results` queues, their triggers
+  and alarms, and the worker's `FEED_FETCHER=sqs` stay after [§ The
+  cutover](#the-cutover) (or come back, if it was already applied).
+- Station fetches get their own FIFO queue, `station-fetch-requests.fifo`
+  (one message group per station host), with its DLQ, its DLQ-arrivals
+  alarm (essential tier) and its oldest-message-age alarm (full tier), and
+  their own SQS trigger into the fetcher at `maximum_concurrency` 2. The
+  worker sends them there (`STATION_FETCH_REQUESTS_QUEUE_URL`, with
+  `sqs:SendMessage` on that queue alone, and the SQS endpoint's
+  `WorkerSendsStationFetchRequests`); answers come back through
+  `ingest-results`. So an owner's slow station hosts can't hold the trigger
+  CHIRPS and DWS fetches use.
+- **The fetcher's reserved concurrency rises by 2**, to
+  `fetcher_reserved_concurrency` + 2 (4 at the default). Station fetches can
+  hold at most their trigger's 2, so CHC's and DWS's trigger and the
+  scheduled modes (daily ingest, GEFS, DWS weekly, dams, ET) keep the
+  `fetcher_reserved_concurrency` they had. The account's concurrency quota
+  needs that 2 more of headroom (the sum of every reservation + 10:
+  `infra/terraform.tfvars.example`); `infra/scripts/preapply-check.sh`
+  counts them when its `--var-file` sets `station_api_feeds = true`.
+
+### Turning it on
+
+The operator does every step; nothing here is for an agent to run.
+
+1. **Release the backend and the web app** with issue #784:
+   `gh release create backend@X.Y.Z --target main --generate-notes`
+   (migration 321 and the feed) and
+   `gh release create web@X.Y.Z --target main --generate-notes` (the Attach a
+   feed form), each approved in the `production` environment. The backend's
+   production check takes an unset `STATION_API_FEEDS` as off, so it starts
+   on today's Terraform.
+2. **Generate the key pair on your own machine:** `pnpm gen:feed-credential-key`.
+   It prints both halves and writes nothing. Never paste the private half
+   into a chat, an issue or a CI log, and clear the terminal afterwards.
+3. **Put the private half in sops:**
+   `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`,
+   adding `feed_credential_private_key: "<the private half>"`
+   (`infra/prod.sops.yaml.example`). `tf.sh` passes it as an ephemeral
+   variable when present; it never reaches state.
+4. **Put the public half and the switch in `prod.tfvars.sops`:**
+   `station_api_feeds = true` and `feed_credential_public_key = "<the public half>"`.
+   Plan refuses the switch without both keys, a malformed key, or the
+   committed dev key.
+5. **Check the headroom, plan, read it, then apply** with your own go-ahead.
+   With `station_api_feeds = true` in `prod.tfvars.sops`,
+   `cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops`
+   counts the fetcher's 2 more in its `lambda-quota` check. Then
+   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars.sops -out=<plan>`
+   and `AWS_PROFILE=water-management ./scripts/tf.sh apply <plan>`. Expect: a new
+   `aws_secretsmanager_secret.runtime["fetcher"]` and its version, the
+   `read-runtime-secret` policy on the fetcher's role, the
+   `station-fetch-requests.fifo` queue and its DLQ (and redrive policy), the
+   fetcher's station trigger (`maximum_concurrency` 2), the
+   `station-fetch-queue` policies on the fetcher's and worker's roles, the
+   SQS endpoint's `WorkerSendsStationFetchRequests` statement, the two
+   station queue alarms, the fetcher's reserved concurrency going from
+   `fetcher_reserved_concurrency` to that + 2, new environment on
+   the backend, worker and fetcher functions (the worker's includes
+   `STATION_FETCH_REQUESTS_QUEUE_URL`), every runtime secret version
+   rewritten (the sops edit moved `runtime_secret_version`, so every Lambda
+   cold-starts), and, if the cutover was already applied, the per-feed
+   queues, triggers and alarms back.
+6. **Check:** the fetcher's log group shows no `refusing to start the
+   fetcher Lambda` after the apply; on a test project, **Data → Data feeds →
+   Attach a feed → Weather station (API)** offers the source; attach one,
+   press **Run now** and watch its health.
+
+### Rotating or turning it off
+
+- **Rotating the pair** (a leak, or routine): generate a new pair, replace
+  both halves (sops and `prod.tfvars.sops`) and apply. Every saved station key is
+  then unreadable: each feed reports that its key can't be opened, and its
+  owner enters it again (**Replace key**). Rotate only when needed.
+- **Turning it off:** `station_api_feeds = false` and apply. The API refuses
+  new station API feeds (existing ones show, and their fetches fail with a
+  clear error), the fetcher's secret is scheduled for deletion, the station
+  queue, its DLQ, trigger, grants and alarms go (check it is empty first:
+  `ApproximateNumberOfMessages` 0), the fetcher's reserved concurrency drops
+  back by 2, and the per-feed queues go again if the cutover is in. Remove the sops key too.
+  Secrets Manager keeps a deleted secret 30 days: turning it back on within
+  that window fails to create `water-management/runtime/fetcher`; restore it
+  (`aws secretsmanager restore-secret --secret-id water-management/runtime/fetcher --profile water-management`)
+  and import it (`infra/scripts/tf.sh import 'aws_secretsmanager_secret.runtime["fetcher"]' <its ARN>`)
+  before the apply.
+
 ## The cutover
 
 Issue #604 moves every feed off its upstream: CHIRPS and CHIRPS-GEFS onto
@@ -3172,9 +3297,11 @@ still refuses to send a source the copy or store serves (a CHIRPS or GEFS
 fetch never reaches SQS with `chirps_source = "mirror"`, nor a DWS fetch
 with `dws_source = "store"`; `backend/src/jobs/handlers/feed-fetch.ts`).
 
-**What the second flag removes.** With both on the new values,
-`local.per_feed_fetching` (`infra/feeds.tf`) is false, and the same apply
-plans to destroy:
+**What the second flag removes.** With both on the new values, and
+`station_api_feeds` off ([§ Station API feeds](#station-api-feeds): a
+station's own API always fetches per feed, so with it on nothing below is
+removed), `local.per_feed_fetching` (`infra/feeds.tf`) is false, and the
+same apply plans to destroy:
 
 - the `fetch-requests` and `ingest-results` queues, their DLQs and redrive
   policies;
@@ -4107,6 +4234,23 @@ outlines are separate and stay. To withdraw it: take `quaternary-evaporation`
 out of `REFERENCE_KINDS` and the gate's `LOADABLE`, and delete the rows with a
 forward migration (`DELETE FROM quaternary_evaporation WHERE dataset = 'WR2012-WRSM2000'`).
 
+#### Shared with other projects
+
+The reference bucket is also where the estate's other projects get the source files they share with this one. That way each file is kept once, not downloaded again by every project. EWR Compliance is the first. Nothing loads these files and the app never reads them. Another project reads them at build time, on the operator's workstation, with the `water-management` profile, and checks each file against its hashes. The bucket policy stays as it is: it grants nothing to any other account.
+
+`bin/share-reference.sh [--dry-run] <kind> <version> <file>...` puts them up:
+- Each file goes to `originals/<kind>/<version>-<file>`, with a space in its name replaced by `-` and its SHA-256 stored as the object's `sha256` metadata.
+- Beside the files it writes `originals/<kind>/<version>-SHA256SUMS`, which a reader checks against.
+- A file already up with the same hash is skipped. One with a different hash, or with no hash recorded, is refused: a new delivery takes a new version.
+
+| Kind | What | Read by |
+| --- | --- | --- |
+| `rivers` | HydroRIVERS v1.0, Africa: the zip as downloaded (`v10-HydroRIVERS_v10_af_shp.zip`; its SHA-256 is pinned in `bin/source-checksums.sha256`). This project's own River network originals too | EWR Compliance `tools/build-rivers.ts`: the lines it draws |
+| `dws-rivers-500k` | The DWS 1:500 000 rivers (`wriall500`) as KML: `PrimaryRivers.kml` and `SecondaryRivers.kml`, with each reach's name, class (perennial or not) and Strahler order | EWR Compliance `tools/build-rivers.ts`: the river names and classes |
+| `dws-quaternaries` | The DWS quaternary catchment boundaries as KML (`Quaternary-Catchment-Boundaries.kml`, 1 843 quaternaries) | Kept for the estate. Neither project reads it yet |
+
+To read one from another project: `aws s3 cp s3://<reference_bucket>/originals/<kind>/<version>-<file> . --profile water-management`. Then check it with that version's `SHA256SUMS`.
+
 #### Refreshing a dataset
 
 Reference data changes yearly at most, and most of it never. Check
@@ -4454,7 +4598,7 @@ the backend treats an unset value on Lambda as closed too ([security.md §
 Sign-up by invitation](./security.md#sign-up-by-invitation)); people then
 join only through an invite from a project or team member. Production ran
 that way from 2026-10-05 and has been **open since 2026-10-06**
-(`signup_open = true` in `prod.tfvars`, applied), before go-live Gates A and
+(`signup_open = true` in `prod.tfvars.sops`, applied), before go-live Gates A and
 C in [legal-status.md](./legal-status.md). To close it again, set it back to
 `false`, plan and apply (no release needed).
 
@@ -4497,8 +4641,8 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 6. Delegate the new zone from the parent (the same NS record the bootstrap's stage 3 wrote for the old zone, here by hand): `aws route53 change-resource-record-sets --hosted-zone-id <PARENT_ZONE_ID> --profile dns-parent --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"icwbt.jaredhoward.com","Type":"NS","TTL":3600,"ResourceRecords":[{"Value":"<NS1>"},{"Value":"<NS2>"},{"Value":"<NS3>"},{"Value":"<NS4>"}]}}]}'`
 7. Wait until the delegation resolves (the four servers from step 4): `dig +short NS icwbt.jaredhoward.com`
 8. Look up the old zone's ID: `aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --max-items 1 --profile water-management --query 'HostedZones[0].[Name,Id]' --output text`
-9. In `infra-secrets/water-management/prod.tfvars` set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
-10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+9. In `infra-secrets/water-management/prod.tfvars.sops` (`AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`) set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
+10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars.sops -out="$HOME/.cache/water-management/prod.tfplan"`
     The plan should show: the certificate replaced (create before destroy) for `icwbt.jaredhoward.com` with the old name as a SAN, and a validation record for the new name; the distribution updated in place (aliases, certificate) and `spa_rewrite` updated; `aws_route53_record.site_a` and `site_aaaa` **moved** to `["water-management.jaredhoward.com"]` with no change, plus new `["icwbt.jaredhoward.com"]` records; the SES identity replaced, with its DKIM, MAIL FROM and DMARC records recreated in the new zone and deleted from the old; the WAF CAPTCHA API key replaced; the Lambdas' `MAIL_FROM`, `SITE_URL`, `ALLOWED_ORIGINS` and `RENDER_SITE_URL`, and the From pins in the IAM and SES endpoint policies, updated. No database, bucket, queue or secret change: stop and ask if there is one.
 11. Apply, in a quiet hour: `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
     Until SES has verified the new domain (minutes, up to an hour), sends fail: the request still answers, the failure is logged, and `mail-send-failed` may fire. SES production access belongs to the account, so it carries over. Go on to steps 12–15 straight away: until the web release (step 15) the old build's sign-in CAPTCHA key no longer exists.
@@ -4506,8 +4650,8 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 13. Push the changed outputs (`PUBLIC_SITE_URL` and the new `WAF_CAPTCHA_API_KEY`) to GitHub: `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`
 14. Release the backend (the new name in emails and the authenticator label), and approve it in the `production` environment ([§ Releasing](#releasing)): `gh release create backend@<next version> --target main --generate-notes`
 15. Once that deploy has finished, release the web app, which ships the new name and carries the new CAPTCHA key (the old build's key no longer exists, so until this release a sign-in that hits the CAPTCHA can't solve it): `gh release create web@<next version> --target main --generate-notes`
-16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --redirect-from water-management.jaredhoward.com`
-17. Point the repository's website at the new address: `gh repo edit Absence0760/project-water-management --homepage https://icwbt.jaredhoward.com`
+16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops --redirect-from water-management.jaredhoward.com`
+17. Point the repository's website at the new address: `gh repo edit jaredhoward-dev/project-water-management --homepage https://icwbt.jaredhoward.com`
 
 What people notice: the session cookie belongs to the host, so anyone signed
 in on the old address signs in again on the new one; an authenticator app
@@ -5060,7 +5204,7 @@ replace or destroy; don't apply one.
    (`terraform init -backend-config=backend.config`, § 3).
 3. Dry run. It makes only read calls (the caller, `terraform output`, the
    instance, its restore window) and prints every command it would run:
-   `infra/scripts/restore-db.sh --region <region> --profile water-management --var-file ../infra-secrets/water-management/prod.tfvars --restore-time 2026-09-28T08:15:00Z`
+   `infra/scripts/restore-db.sh --region <region> --profile water-management --var-file ../infra-secrets/water-management/prod.tfvars.sops --restore-time 2026-09-28T08:15:00Z`
    (or `--latest`, or `--snapshot <id>`). It refuses a time outside the
    restore window, a region that isn't the stack's, and a missing profile or
    region.
@@ -5070,7 +5214,7 @@ replace or destroy; don't apply one.
    15 to 30 minutes for a small database. If it stops part-way, it prints
    where and the command that finishes or undoes that step.
 5. Read the plan it printed, then apply it (the script never applies):
-   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`.
+   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops`.
 6. Invoke the migrate Lambda (the script prints the command). It applies any
    migration newer than the restore point and resets `water_app`'s password.
 6a. **Re-apply erasures and revocations** (POPIA s14(4), s24; provisional

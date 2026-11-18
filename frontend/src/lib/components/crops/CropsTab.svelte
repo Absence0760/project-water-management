@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+	import { apanInputOf } from '#lib/model/systems.js';
 	// Crops & demand (issue #17, option A · A3): the answers first, the crop
 	// grids one click away. A compact crop list, largest planted area first (a
 	// row per crop: its colour, area, peak-need month, a sparkline of its 12
@@ -109,7 +110,7 @@
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
 	// The preview reads the monthly means only; a run reads a daily A-pan series first (issue #173).
 	const apanNote = $derived(demandApanNote(apanDaily));
-	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, farmIds));
+	const demand = $derived(farmDemands(editor.model, apanInputOf(settings, editor.model.nodes), settings.februaryDays, farmIds));
 	const demandTotal = $derived(catchmentDemand(demand));
 	const stacks = $derived(cropStacks(demand, crops, colouring.named).map((s) => ({ ...s, color: s.id === 'other' ? OTHER_COLOUR : colourOf(s.id) })));
 	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));

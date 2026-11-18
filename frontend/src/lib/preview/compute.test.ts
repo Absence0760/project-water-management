@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyScenario, compareRuns, firmYield, prepareYield, runModelWithoutChecks, SUPPLY_TARGET, type ModelInput, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, compareRuns, firmYield, irrigationDemandUnits, prepareYield, runModelWithoutChecks, SUPPLY_TARGET, type ModelInput, type ScenarioOp } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forgetBase, handle, parseMessage, previewEffect, previewHydrograph, previewYield } from './compute';
@@ -42,6 +42,23 @@ describe('previewYield', () => {
 		const { input, nodeId } = withDam();
 		const o = { ...opts, assurance: 0.8 };
 		expect(previewYield({ input, nodeId, ...o })).toEqual(firmYield(prepareYield(input), nodeId, o));
+	});
+
+	it("takes another unit's demand shape as the job does (patternNodeId)", () => {
+		const { input: seed, nodeId } = withDam();
+		// A unit beside the dam with no dam and a crop of its own, so it has irrigation demand to lend.
+		const dam = seed.model.nodes.find((n) => n.id === nodeId)!;
+		const farm = { ...dam, id: 'lender', name: 'Lender', downstreamNodeId: dam.downstreamNodeId ?? dam.id, damCapacityM3: 0, damInitialPct: 0, pctRunoffToDam: 0, pctUpstreamToDam: 0 };
+		const crop = { id: 'lend-crop', name: 'Lent', cropFactor: new Array(12).fill(1) };
+		const input = {
+			...seed,
+			model: { ...seed.model, nodes: [...seed.model.nodes, farm], crops: [...seed.model.crops, crop], cropAreas: [...seed.model.cropAreas, { nodeId: farm.id, cropId: crop.id, areaM2: 50_000 }] }
+		};
+		const p = prepareYield(input);
+		const other = irrigationDemandUnits(p).find((id) => id !== nodeId);
+		expect(other, 'another unit with irrigation demand').toBeDefined();
+		const o = { ...opts, pattern: 'demand' as const, patternNodeId: other! };
+		expect(previewYield({ input, nodeId, ...o })).toEqual(firmYield(p, nodeId, o));
 	});
 
 	it("applies a scenario's ops first, as the job does", () => {
@@ -141,6 +158,12 @@ describe('parseMessage: the worker message is checked at the boundary', () => {
 		expect(at({ pattern: [1, 2, 3] })).toMatch(/pattern/);
 		expect(at({ nodeId: 42 })).toMatch(/nodeId/);
 		expect(at({ ops: 'all' })).toMatch(/ops: must be a list/);
+		// Another unit's demand shape (engine 1.117.0): an id, with the 'demand' pattern only.
+		expect(at({ patternNodeId: 'x' })).toMatch(/patternNodeId/);
+		expect(at({ pattern: 'demand', patternNodeId: 42 })).toMatch(/patternNodeId/);
+		const m = good();
+		const ok = parseMessage({ ...m, request: { ...m.request, pattern: 'demand', patternNodeId: 'farm-2' } });
+		expect(ok.ok && ok.msg.type === 'yield' && ok.msg.request.patternNodeId).toBe('farm-2');
 	});
 
 	it("refuses an input without the engine's outline", () => {

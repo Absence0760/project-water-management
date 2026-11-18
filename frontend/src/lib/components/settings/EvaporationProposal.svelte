@@ -9,8 +9,8 @@
 	revision citing the dataset; it waits while the form has unsaved changes,
 	since it saves straight to the project. Nothing is applied by itself.
 
-	With `dataset` (Model settings → Demand → A-pan from "CCWR A-pan grid
-	(catchment average)", docs/ui.md § Demand) the panel is pinned to that grid:
+	With `dataset` (Model settings → Demand → A-pan from "CCWR A-pan
+	(Catchment)", docs/ui.md § Demand) the panel is pinned to that grid:
 	no grid picker, its own heading, and a grid that isn't loaded on this server
 	says so with the operator's import command instead of proposing another.
 -->
@@ -121,7 +121,7 @@
 	prefix={pinned ? 'ccwr-apan' : 'evaporation'}
 	id="set-evaporation"
 	variant="inline"
-	title={pinned ? `${evaporationGridName(pinned)} grid (catchment average)` : 'Evaporation from the map'}
+	title={pinned ? `${evaporationGridName(pinned)} (Catchment)` : 'Evaporation from the map'}
 	level={4}
 	helpKey="evaporation-from-map"
 	what="evaporation summary"

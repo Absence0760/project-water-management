@@ -843,3 +843,32 @@ test('the months met follow the daily EWR in use, named for it, change with it a
 	await expect(rules.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' })).toHaveAttribute('aria-pressed', 'true');
 	await expectNoViolations(page, { include: '#res-reserve' });
 });
+
+// The daily months at a hydrological unit (docs/ui.md § EWR): "At" judges the flow leaving the unit against its
+// share of the daily EWR (with the shares above it), from the run's stored series, and goes back to the outlet.
+test('the daily months met can be judged at a hydrological unit, named for it, and back at the outlet', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River unit months');
+	await createRun(page.request, id, 'Pragmatic');
+	await openRiver(page, id);
+	const panel = page.getByRole('region', { name: 'Pragmatic EWR met, by month' });
+	const at = page.locator('#res-reserve').getByRole('combobox', { name: 'At' });
+	await expect(at.locator('option')).toHaveText(['The outlet', 'Upper farm', 'Lower farm']);
+	await expect(at).toHaveValue('');
+
+	const series = page.waitForResponse((r) => /\/series\?/.test(r.url()) && r.url().includes('key=ewr_cumulative'));
+	await at.selectOption({ label: 'Upper farm' });
+	await series;
+	await expect(panel.getByRole('status')).toHaveText(/^Upper farm: (Met in|Not met in) .*(36 complete months|of 36 months)/);
+	await expect(panel).toContainText('Each whole calendar month at Upper farm: met when the flow leaving Upper farm (after its abstractions)');
+	await expect(panel.getByRole('img', { name: /^Share of months met per month of the year at Upper farm/ })).toBeVisible();
+	const table = panel.getByRole('table', { name: /^By month of the year/ });
+	await expect(table.locator('tbody tr')).toHaveCount(12);
+	await expect(table.getByRole('row', { name: /^Oct/ }).getByRole('cell').nth(0)).toHaveText('3');
+	await expectNoViolations(page, { include: '#res-reserve' });
+
+	await at.selectOption({ label: 'The outlet' });
+	await expect(panel.getByRole('status')).toHaveText(/^Outlet \(.+\): (Met in|Not met in) /);
+	await expect(panel.getByRole('img', { name: /^Share of months met per month of the year at the outlet/ })).toBeVisible();
+});

@@ -26,8 +26,8 @@ export const yieldHandler = defineHandler({
 	async run({ db, job, payload, progress }) {
 		const role = await requireRole(db, job.projectId, 'contributor');
 		// Also refuses a run or scenario changed since the request was checked (a node removed): the user's to fix.
-		const input = await yieldInputFor(db, job.projectId, role, job.actingUserId, payload);
-		const { pattern, assurance, tolerance, points: n } = payload.params;
+		const { input, opsSha256 } = await yieldInputFor(db, job.projectId, role, job.actingUserId, payload);
+		const { pattern, patternNodeId, assurance, tolerance, points: n, maxCapacityM3 } = payload.params;
 		let problem: YieldProblem;
 		try {
 			problem = prepareYield(input);
@@ -35,7 +35,7 @@ export const yieldHandler = defineHandler({
 			// The model refused the input (no rainfall, over-allocated shares …): another attempt won't help.
 			throw new JobError(`the model can't run this input: ${(err as Error).message}`, { retry: false });
 		}
-		const opts = { pattern, assurance, tolerance };
+		const opts = { pattern, assurance, tolerance, ...(patternNodeId !== undefined ? { patternNodeId } : {}) };
 		let points: YieldPoints;
 		try {
 			if (payload.kind === 'firm') {
@@ -43,7 +43,8 @@ export const yieldHandler = defineHandler({
 				if (!(await progress(100))) throw CANCELLED();
 			} else {
 				const i = problem.nodeIds.indexOf(payload.nodeId);
-				const caps = storageYieldCapacities(problem.plan.nodes[i]!.damCapacityM3, n);
+				// To twice the dam's own capacity, or to the largest one entered (sizing a proposed dam, engine ≥ 1.117.0).
+				const caps = storageYieldCapacities(problem.plan.nodes[i]!.damCapacityM3, n, maxCapacityM3);
 				const out: YieldPoint[] = [];
 				for (const c of caps) {
 					out.push(firmYield(problem, payload.nodeId, { ...opts, capacityM3: c }));
@@ -59,10 +60,13 @@ export const yieldHandler = defineHandler({
 		const target = payload.runId ? { col: 'run_id', id: payload.runId } : { col: 'scenario_id', id: payload.scenarioId! };
 		// The mode it ran with (221): what a viewer kept from the volumes is gated on, not the scenario's later state (#523 G1c).
 		const allocationMode = resolveAllocationMode(input.settings.allocationMode, []);
+		// The name the unit shaping the draft has now, so the result still says whose shape it was after a rename or removal.
+		const patternNodeName = patternNodeId === undefined ? undefined : input.model.nodes.find((x) => x.id === patternNodeId)?.name;
+		const params = patternNodeName === undefined ? payload.params : { ...payload.params, patternNodeName };
 		await db.query(
-			`INSERT INTO yield_result (project_id, ${target.col}, node_id, job_id, kind, params, points, engine_version, allocation_mode)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			[job.projectId, target.id, payload.nodeId, job.id, payload.kind, JSON.stringify(payload.params), JSON.stringify(points), ENGINE_VERSION, allocationMode]
+			`INSERT INTO yield_result (project_id, ${target.col}, node_id, job_id, kind, params, points, engine_version, allocation_mode, ops_sha256)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			[job.projectId, target.id, payload.nodeId, job.id, payload.kind, JSON.stringify(params), JSON.stringify(points), ENGINE_VERSION, allocationMode, opsSha256]
 		);
 		await db.query(
 			`DELETE FROM yield_result WHERE id IN (

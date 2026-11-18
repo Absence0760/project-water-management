@@ -924,6 +924,11 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Engine ≥ 1.49.0; provenance only (a lake-factor preset's note). A snapshot without it had none.
 	lakeEvapFactorSource: { label: 'Dam evaporation factor source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (the original workbook’s recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
+	// Engine ≥ 1.117.0 (model.md §2.3b); a snapshot without it ran on the one row.
+	apanBasis: {
+		label: 'A-pan the units run on',
+		fmt: (v) => (v === 'units' ? 'each unit’s own (CCWR A-pan (Hydrological Unit))' : 'the one A-pan row')
+	},
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',
 		fmt: (v) => (v === 'monthly' ? 'monthly factors' : v === 'none' ? 'raw CHIRPS' : String(v))
@@ -1060,6 +1065,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...d,
 		...r,
 		runoffModel: r.runoffModel ?? 'legacy',
+		// Engine ≥ 1.117.0: absent, null and 'catchment' all run on the one A-pan row.
+		apanBasis: r.apanBasis === 'units' ? 'units' : 'catchment',
 		// Runs store settings merged over the defaults, so a snapshot without a
 		// store size predates it (engine < 0.14.0) and carried no rain over.
 		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
@@ -1297,6 +1304,29 @@ function calibrationLocationChanges(a: Record<string, unknown>, b: Record<string
 	return out;
 }
 
+const APAN_UNITS_LABEL = 'Each unit’s own A-pan';
+
+/**
+ * Each unit's own A-pan rows (engine ≥ 1.117.0, settings.apanUnits) in words: the units given one, the units that lost
+ * theirs, and the units whose row changed (with the change in their year). Read only under the 'units' basis, which
+ * the basis line says.
+ */
+function apanUnitsChanges(a: unknown, b: unknown, name: (id: string) => string): string[] {
+	const rows = (v: unknown): Record<string, number[]> => (v && typeof v === 'object' && (v as { units?: unknown }).units && typeof (v as { units: unknown }).units === 'object' ? ((v as { units: Record<string, number[]> }).units) : {});
+	const ra = rows(a);
+	const rb = rows(b);
+	const year = (r: readonly number[]) => Math.round(r.reduce((x, y) => x + y, 0));
+	const out: string[] = [];
+	const ids = [...new Set([...Object.keys(ra), ...Object.keys(rb)])].sort();
+	const added = ids.filter((id) => !ra[id] && rb[id]);
+	const removed = ids.filter((id) => ra[id] && !rb[id]);
+	const changed = ids.filter((id) => ra[id] && rb[id] && !same(ra[id], rb[id]));
+	if (added.length) out.push(`given to ${added.map((id) => `${name(id)} (${year(rb[id]!)} mm a year)`).join(', ')}`);
+	if (removed.length) out.push(`removed from ${removed.map(name).join(', ')}`);
+	if (changed.length) out.push(`changed for ${changed.map((id) => `${name(id)} (${year(ra[id]!)} → ${year(rb[id]!)} mm a year)`).join(', ')}`);
+	return out;
+}
+
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
@@ -1332,6 +1362,7 @@ function diffSettings(
 	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
 	const areal = arealRainChange(a.arealRain, b.arealRain);
 	if (areal) push(AREAL_RAIN_LABEL, `${AREAL_RAIN_LABEL}: ${areal}`);
+	for (const t of apanUnitsChanges(a.apanUnits, b.apanUnits, siteName)) push(APAN_UNITS_LABEL, `${APAN_UNITS_LABEL}: ${t}`);
 	const unitRain = unitRainChange(a.unitRain, b.unitRain);
 	if (unitRain) push(UNIT_RAIN_LABEL, `${UNIT_RAIN_LABEL}: ${unitRain}`);
 	for (const t of rainStationChanges(a.rainStations, b.rainStations, (id) => siteName(id), stations.a, stations.b, recordName)) push(RAIN_STATIONS_LABEL, `${RAIN_STATIONS_LABEL}: ${t}`);
@@ -1439,8 +1470,9 @@ function diffSettings(
 		'effectiveRainFractionMonthly',
 		'droughtRestriction',
 		'ewrDailySource',
-		// Said in words above (unitRainText, rainStationChanges), so not again as a bare "Setting changed".
+		// Said in words above (unitRainText, rainStationChanges, apanUnitsChanges), so not again as a bare "Setting changed".
 		'unitRain',
+		'apanUnits',
 		'rainStations',
 		// Engine ≥ 1.102.0 (issue #611): said above.
 		'flowMissing',

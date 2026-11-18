@@ -5,8 +5,11 @@
 # error. It makes only Get/Describe calls and never prints a secret.
 #
 #   infra/scripts/preapply-check.sh --profile water-management \
-#     [--region af-south-1] [--var-file ../../infra-secrets/water-management/prod.tfvars] \
+#     [--region af-south-1] [--var-file ../../infra-secrets/water-management/prod.tfvars.sops] \
 #     [--backend-config infra/backend.config] [--reserved <n>]
+#
+# A --var-file ending in .sops (prod.tfvars.sops) is decrypted with sops, as
+# --profile, to a private temporary copy that is removed on exit.
 #
 # Checks:
 #   1. lambda-quota    The region's Lambda concurrent-executions quota
@@ -35,13 +38,18 @@
 # plain number (`name = 10`). A new Lambda's variable is picked up by its
 # name, with no list here to keep in step. The renderer's reservation counts
 # even before renderer_image_tag creates the function: the quota must cover
-# the second apply too. --reserved <n> skips the parsing and uses n as the
+# the second apply too. With station_api_feeds = true in the var file, the
+# fetcher reserves local.station_fetch_concurrency more (feeds.tf, issue #784),
+# read from feeds.tf and added as station-fetch=<n>. --reserved <n> skips the
+# parsing and uses n as the
 # sum. The region and DB instance class come from --region / --var-file the
 # same way (defaults: variables.tf). Tested against a fake `aws`
 # (preapply-check.test.mjs, check-stubs/; `pnpm test:guards`).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=sops-var-file.sh
+. "$here/sops-var-file.sh"
 infra="$(cd "$here/.." && pwd)"
 project="water-management"
 state_region="us-east-1"
@@ -70,6 +78,14 @@ done
 if [ -n "$var_file" ] && [ ! -f "$var_file" ]; then
 	echo "preapply-check: no such var file: $var_file" >&2
 	exit 2
+fi
+# A *.sops var file (prod.tfvars.sops) is read from a private decrypted copy,
+# removed on exit (sops-var-file.sh), decrypted as --profile.
+var_tmp=""
+if [[ "$var_file" = *.sops ]]; then
+	var_tmp="$(umask 077 && mktemp -d)"
+	trap 'rm -rf "$var_tmp"' EXIT
+	var_file="$( [ -z "$profile" ] || export AWS_PROFILE="$profile"; sops_var_file "$var_file" "$var_tmp")" || exit 2
 fi
 if [ -n "$reserved" ] && ! [[ "$reserved" =~ ^[0-9]+$ ]]; then
 	echo "preapply-check: --reserved must be a whole number" >&2
@@ -119,7 +135,7 @@ pass() { printf 'PASS  %-14s %s\n' "$1" "$2"; }
 fail() { printf 'FAIL  %-14s %s\n' "$1" "$2"; failures=$((failures + 1)); }
 
 errfile="$(mktemp)"
-trap 'rm -f "$errfile"' EXIT
+trap 'rm -f "$errfile"; [ -z "$var_tmp" ] || rm -rf "$var_tmp"' EXIT
 # The first non-blank line of the last AWS error (an error code and message, no secret).
 aws_error() { { grep -m 1 -v "^[[:space:]]*$" "$errfile" || true; } | cut -c1-200; }
 
@@ -154,6 +170,19 @@ if [ -z "$reserved" ]; then
 		reserved=$((reserved + v))
 		breakdown="$breakdown ${n%_reserved_concurrency}=$v"
 	done
+	# Station API feeds raise the fetcher's reservation by their trigger's
+	# ceiling (feeds.tf local.fetcher_reserved_concurrency), which no
+	# *_reserved_concurrency variable carries.
+	if [ -n "$reserved" ] && [ "$(var_value station_api_feeds)" = true ]; then
+		v="$(sed -n 's/^[[:space:]]*station_fetch_concurrency[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$infra/feeds.tf" | head -n 1)"
+		if [[ "$v" =~ ^[0-9]+$ ]]; then
+			reserved=$((reserved + v))
+			breakdown="$breakdown station-fetch=$v"
+		else
+			fail lambda-quota "station_api_feeds is on, but local.station_fetch_concurrency in feeds.tf isn't a plain number; pass --reserved <sum>"
+			reserved=""
+		fi
+	fi
 fi
 if [ -n "$reserved" ]; then
 	need=$((reserved + 10))

@@ -154,8 +154,8 @@
 	<h2 id="more">9. The full audit</h2>
 	<p>
 		The full engine audit, with every finding’s evidence, the tests that pin it and the published sources behind each decision, is in
-		the project’s public source: <a href="https://github.com/Absence0760/project-water-management/blob/main/docs/engine-audit.md">engine audit</a>. The model’s formulas are in the
-		<a href="https://github.com/Absence0760/project-water-management/blob/main/docs/model.md">model reference</a>. Questions about the method are welcome at
+		the project’s public source: <a href="https://github.com/jaredhoward-dev/project-water-management/blob/main/docs/engine-audit.md">engine audit</a>. The model’s formulas are in the
+		<a href="https://github.com/jaredhoward-dev/project-water-management/blob/main/docs/model.md">model reference</a>. Questions about the method are welcome at
 		<a href="mailto:jared@jaredhoward.com">jared@jaredhoward.com</a>.
 	</p>
 </LegalPage>

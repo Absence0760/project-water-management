@@ -17,6 +17,8 @@ export interface YieldPreviewRequest {
 	ops?: readonly ScenarioOp[];
 	nodeId: string;
 	pattern: YieldPattern;
+	/** With pattern 'demand': the unit whose irrigation demand shapes the draft (engine ≥ 1.117.0); absent = the dam's own. */
+	patternNodeId?: string;
 	assurance: number;
 	tolerance: number;
 }

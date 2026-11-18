@@ -77,6 +77,24 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_migration_owners" {
+  description = <<-EOT
+    Other GitHub owners whose subject for this same repo the deploy role's
+    trust may also hold, for the duration of an org move only
+    (Absence0760/project-mgmt#14). During the switchover the bootstrap trusts
+    the old and the new owner's subject; list the one that isn't github_repo's
+    owner here so oidc.tf's trust check accepts both. Empty otherwise, which
+    keeps the check at exactly one subject.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for o in var.github_migration_owners : can(regex("^[A-Za-z0-9-]+$", o))])
+    error_message = "github_migration_owners entries are bare GitHub owner logins (no slash, no @id)."
+  }
+}
+
 variable "bootstrap_slug" {
   description = <<-EOT
     Project slug used by the cross-project bootstrap when creating the OIDC
@@ -156,6 +174,19 @@ variable "app_encryption_key" {
   validation {
     condition     = can(regex("^[A-Za-z0-9]{32,}$", var.app_encryption_key))
     error_message = "app_encryption_key in prod.sops.yaml must be 32+ alphanumeric characters (the API refuses shorter). Generate with: openssl rand -hex 32"
+  }
+}
+
+variable "feed_credential_private_key" {
+  description = "The fetcher's X25519 private key, which opens the credentials of station API feeds (issue #784; backend/src/feeds/credential.ts; docs/security.md § Station API feeds). The fetcher only, in its runtime secret (secrets.tf), and only while station_api_feeds is on. sops key feed_credential_private_key; generate the pair with pnpm gen:feed-credential-key (its public half is feed_credential_public_key). Empty (the default) while station API feeds are off. Rotating it voids every saved station key: each owner enters theirs again (Replace key)."
+  type        = string
+  default     = ""
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    # 32 bytes, base64url without padding: 43 characters, the last carrying 4 bits.
+    condition     = var.feed_credential_private_key == "" || can(regex("^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$", var.feed_credential_private_key))
+    error_message = "feed_credential_private_key in prod.sops.yaml must be empty or a 32-byte base64url key (43 characters), as pnpm gen:feed-credential-key prints it."
   }
 }
 
@@ -742,6 +773,31 @@ variable "dws_source" {
   validation {
     condition     = contains(["live", "store"], var.dws_source)
     error_message = "dws_source must be live or store."
+  }
+}
+
+variable "station_api_feeds" {
+  description = "Let owners attach station API feeds: a rainfall station's data fetched from its provider's own web API (issue #784; docs/deployment.md § Station API feeds). On sets STATION_API_FEEDS=on on the API, the worker and the fetcher, passes feed_credential_public_key to the API (which seals each saved key with it), gives the fetcher its own runtime secret holding feed_credential_private_key (secrets.tf) with GetSecretValue on that secret alone, and keeps per-feed fetching on whatever chirps_source and dws_source say (feeds.tf local.per_feed_fetching): a station's own API can't be read from our copy. Both keys are then required. Off (the default) until the operator has generated the pair and a backend release with the feed is out."
+  type        = bool
+  default     = false
+  validation {
+    # Ephemeral values may appear in a validation; this only asks whether one is set.
+    condition     = !var.station_api_feeds || (var.feed_credential_public_key != "" && var.feed_credential_private_key != "")
+    error_message = "station_api_feeds needs feed_credential_public_key (prod.tfvars.sops) and feed_credential_private_key (prod.sops.yaml): generate the pair with pnpm gen:feed-credential-key (docs/deployment.md § Station API feeds)."
+  }
+}
+
+variable "feed_credential_public_key" {
+  description = "The public half of the fetcher's X25519 key (pnpm gen:feed-credential-key), which the API seals each station API feed's credential to (FEED_CREDENTIAL_PUBLIC_KEY; backend/src/feeds/credential.ts). Not a secret: it can seal, never open. The fetcher gets it too, to check at cold start that its private key pairs with it. Empty (the default) while station_api_feeds is off."
+  type        = string
+  default     = ""
+  validation {
+    condition = var.feed_credential_public_key == "" || (
+      can(regex("^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$", var.feed_credential_public_key)) &&
+      # The committed dev key (backend/.env.development), whose private half is in this public repo.
+      var.feed_credential_public_key != "g-xo1mrWk9kZ42VUSOO8eMbk5xQjlQ3GlXFzlFjcKCs"
+    )
+    error_message = "feed_credential_public_key must be empty or a 32-byte base64url key (43 characters) from pnpm gen:feed-credential-key, never the committed dev key."
   }
 }
 

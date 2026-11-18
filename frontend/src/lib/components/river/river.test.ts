@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
 import { EWR_MAP_ANCHOR, RIVER_ANCHORS, riverAnchor, riverHref } from './links';
-import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type MonthsJudge, type RiverKpi } from './river';
+import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, scenarioRunNote, type MonthsJudge, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -182,6 +182,28 @@ describe('pickRiverRun', () => {
 		expect(pickRiverRun([a, b, c], 'deleted')).toEqual({ run: b, previous: c, gone: true });
 		// No `run=`, or an empty one, isn't a gone run: there was nothing to find.
 		expect(pickRiverRun([a, b, c], '')?.gone).toBe(false);
+	});
+});
+
+describe('scenarioRunNote (the note on a scenario’s run)', () => {
+	const base = meta('base', '2026-11-01T08:00:00Z');
+	const scen = { ...meta('sc', '2026-11-09T18:31:00Z'), label: 'Hexberg Dam', scenarioId: 's1', scenarioName: 'Hexberg Dam', fromScenario: true, scenarioBaseRunId: 'base' };
+
+	it('names the scenario and finds its base run in the list', () => {
+		expect(scenarioRunNote(scen, [scen, base])).toEqual({ name: 'Hexberg Dam', scenarioId: 's1', base });
+	});
+
+	it('has no base to show when the base isn’t in the list (deleted, or an older API)', () => {
+		expect(scenarioRunNote(scen, [scen])?.base).toBeNull();
+		expect(scenarioRunNote({ ...scen, scenarioBaseRunId: undefined }, [scen, base])?.base).toBeNull();
+	});
+
+	it('still notes a run whose scenario was deleted, with no scenario to open', () => {
+		expect(scenarioRunNote({ ...scen, scenarioId: null }, [scen, base])).toEqual({ name: 'Hexberg Dam', scenarioId: null, base });
+	});
+
+	it('is null for a run of the model (positive control above)', () => {
+		expect(scenarioRunNote({ ...base, fromScenario: false }, [base])).toBeNull();
 	});
 });
 

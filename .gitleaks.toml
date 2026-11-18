@@ -30,6 +30,12 @@ regexes = [
   # in frontend/src/lib/components/supply/UnitResultsTable.svelte's column list when its lines gained a help key.
   '''^avgSuppliedM3Day$''',
   '''^avgDeficitM3Day$''',
+  # Three more model field names after "key:", reviewed 2026-11-10 (issue #756): the weekly full-history sweep matched
+  # them in September commits of frontend/src/lib/components/runs/RunSummaryView.svelte (a column list) and
+  # frontend/src/lib/components/settings/calibration.ts (the calibration fields). Field names, not credentials.
+  '''^avgEwrShortfallM3Day$''',
+  '''^amplitudeM3Day$''',
+  '''^recessionCurveM3Day$''',
   # The full-history sweep's findings once the repo's history was recreated (2026-09-28): .gitleaksignore pinned
   # these by commit, and every commit changed. Reviewed 2026-10-09 (issue #435): fake values in tests and
   # infra/scripts, and field or element names after "key:".
@@ -50,4 +56,13 @@ regexes = [
   # A model setting's name after "key:" (issue #640, the assistant's propose_settings test), reviewed 2026-10-28:
   # generic-api-key matched it in backend/src/assistant/tools/proposeSettings.test.ts.
   '''^ewrPragmaticM3PerDay$''',
+  # Station API feeds (issue #784), reviewed 2026-11-16: the committed dev-only X25519 private key in
+  # backend/.env.development (it decodes to the bytes "dev-only-feed-credential-key-000", and production refuses it,
+  # config/production.ts), and invented keys in the feed tests (sources/station.test.ts, stationHttp.test.ts,
+  # stationApiFeed.db.test.ts) that stripe-access-token and generic-api-key read as real.
+  '''^ZGV2LW9ubHktZmVlZC1jcmVkZW50aWFsLWtleS0wMDA$''',
+  '''^sk_live_0123456789abcdefXYZ$''',
+  '''^sk_test_abcdefghijklmnop$''',
+  '''^pk_live_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t$''',
+  '''^replacement-secret-9876543210-abcd$''',
 ]

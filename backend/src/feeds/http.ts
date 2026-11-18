@@ -106,7 +106,7 @@ const TIMEOUT_MS = 20_000;
 /** A range read is a few tens of KB; a DWS page for 20 years is ~150 KB. */
 const MAX_BYTES = 4 * 1024 * 1024;
 const USER_AGENT_PRODUCT = 'water-management-feeds/1';
-const USER_AGENT_URL = '+https://github.com/Absence0760/project-water-management';
+const USER_AGENT_URL = '+https://github.com/jaredhoward-dev/project-water-management';
 
 /**
  * Our user agent: the product, the repo, and a contact address when one is

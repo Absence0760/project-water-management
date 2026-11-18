@@ -3,6 +3,7 @@
 // A run reference is "<projectId>:<runId>" — the same form GET /compare/runs takes.
 import type { RunMeta } from '#lib/api/types.js';
 import { runYears } from '#lib/components/runs/runList.js';
+import { isScenarioRun, type ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 
 export interface RunRef {
 	projectId: string;
@@ -93,18 +94,52 @@ export function compareTabHref(a: RunRef | null, b: RunRef | null, c: RunRef | n
 	return `?${q}`;
 }
 
+/** The longest a scenario's name runs in a run's picker label before it is cut (runPickName). */
+export const SCENARIO_NAME_MAX = 32;
+
+/** `s` cut to `max` characters with an ellipsis, at a word break when there is one in its second half. */
+function clip(s: string, max: number): string {
+	if (s.length <= max) return s;
+	const cut = s.slice(0, max - 1);
+	const space = cut.lastIndexOf(' ');
+	return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * A run's name in a picker, saying when a scenario made it (isScenarioRun,
+ * also once the scenario is deleted): "Hexberg Dam (scenario)" for a run
+ * labelled with its scenario's name (the default label), "Hexberg Dam
+ * (scenario, as licensed)" for the default label of a run of its licensed
+ * terms, and "Wet years (scenario: Hexberg Dam)" when the label is
+ * another, the scenario's name cut to SCENARIO_NAME_MAX so the select stays
+ * narrow. A run of the model is its label, as before.
+ */
+export function runPickName(r: Pick<RunMeta, 'label'> & ScenarioRunFields): string {
+	const label = (r.label ?? '').trim();
+	if (!isScenarioRun(r)) return label || 'Untitled run';
+	const scenario = (r.scenarioName ?? '').trim();
+	if (!scenario || !label || label === scenario) return `${label || scenario || 'Untitled run'} (scenario)`;
+	if (label.startsWith(scenario)) {
+		const rest = label.slice(scenario.length).trim();
+		const tag = /^\(([^()]+)\)$/.exec(rest);
+		return tag ? `${scenario} (scenario, ${tag[1]})` : `${label} (scenario)`;
+	}
+	return `${label} (scenario: ${clip(scenario, SCENARIO_NAME_MAX)})`;
+}
+
 /**
  * A run in a picker, with what the Runs list shows beside it: "Baseline ·
  * 2026-09-23 14:05 · 1979–2024 · latest · published · evidence · pinned ·
  * workbook comparison" (each tag only when it applies). A native option holds text
- * only, so the tags are words, in the Runs list's order.
+ * only, so the tags are words, in the Runs list's order. A scenario's run
+ * names its scenario (runPickName): "Hexberg Dam (scenario) · 9 Nov 2026 20:31 · 1981–2026".
  */
 export function runOptionLabel(
-	r: Pick<RunMeta, 'label' | 'createdAt' | 'startDate' | 'endDate' | 'evidence' | 'pinned' | 'legacy' | 'published'>,
+	r: Pick<RunMeta, 'label' | 'createdAt' | 'startDate' | 'endDate' | 'evidence' | 'pinned' | 'legacy' | 'published'> & ScenarioRunFields,
 	fmtDate: (iso: string) => string,
 	latest = false
 ): string {
-	const parts = [r.label || 'Untitled run', fmtDate(r.createdAt), runYears(r.startDate, r.endDate)];
+	const parts = [runPickName(r), fmtDate(r.createdAt), runYears(r.startDate, r.endDate)];
 	if (latest) parts.push('latest');
 	if (r.published) parts.push('published');
 	if (r.evidence === 'current') parts.push('evidence');

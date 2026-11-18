@@ -2,6 +2,7 @@
 //
 //   POST /projects/:id/yield   editor, or a contributor on their own application   queue a yield job (202 { jobId }; 200 when an identical one is pending)
 //   GET  /projects/:id/yield   viewer (a contributor: their own results)   stored results, ?runId= or ?scenarioId=, optional nodeId / jobId
+//   GET  /projects/:id/yield/options   viewer (a contributor: their own units)   a dam's capacity in the model, and the units whose irrigation demand can shape its draft
 //   GET  /projects/:id/yield/jobs   viewer (a contributor: their own jobs)   a dam's pending yield jobs, ?nodeId= (optional runId or scenarioId)
 //   POST /projects/:id/yield/:jobId/cancel   the user who queued it, or an editor   stop a yield job
 //
@@ -19,7 +20,19 @@ import { ApiError } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { listPendingYieldJobs, listYieldResults, pendingYieldJobs, YIELD_JOBS_PER_USER, yieldDedupeKey, yieldInputFor, YieldRequest, yieldsOnCapOrFull } from './store.js';
+import {
+	canonicalYieldRequest,
+	checkPatternDemand,
+	listPendingYieldJobs,
+	listYieldResults,
+	pendingYieldJobs,
+	YIELD_JOBS_PER_USER,
+	yieldDedupeKey,
+	YieldRequest,
+	yieldOptions,
+	yieldsOnCapOrFull,
+	yieldTargetFor
+} from './store.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 
 const Uuid = z.string().uuid();
@@ -27,6 +40,10 @@ const ListQuery = z
 	.object({ runId: Uuid.optional(), scenarioId: Uuid.optional(), nodeId: Uuid.optional(), jobId: Uuid.optional() })
 	.strict()
 	.refine((q) => !q.runId !== !q.scenarioId || !!q.jobId, 'give runId, scenarioId or jobId');
+const OptionsQuery = z
+	.object({ nodeId: Uuid, runId: Uuid.optional(), scenarioId: Uuid.optional() })
+	.strict()
+	.refine((q) => !q.runId !== !q.scenarioId, 'give exactly one of runId and scenarioId');
 const JobsQuery = z
 	.object({ nodeId: Uuid, runId: Uuid.optional(), scenarioId: Uuid.optional() })
 	.strict()
@@ -34,12 +51,14 @@ const JobsQuery = z
 
 export const yieldRoutes = new Hono<AuthEnv>()
 	.post('/:id/yield', async (c) => {
-		const body = YieldRequest.parse(await readJson(c));
+		const body = canonicalYieldRequest(YieldRequest.parse(await readJson(c)));
 		const id = c.req.param('id');
 		const result = await withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			// Checked now so a bad request is a 400/403/404 here, not a dead job later.
-			await yieldInputFor(db, id, role, c.get('userId'), body);
+			const { input, visible } = await yieldTargetFor(db, id, role, c.get('userId'), body);
+			// Another unit's demand shape: it must have some (the model built once, as the job will).
+			checkPatternDemand(input, body.params.patternNodeId, visible);
 			const dedupeKey = yieldDedupeKey(body, role === 'contributor' ? c.get('userId') : undefined);
 			const pending = await pendingYieldJobs(db);
 			const { rows: same } = await db.query(`SELECT 1 FROM job WHERE project_id = $1 AND dedupe_key = $2 AND status IN ('queued', 'failed')`, [id, dedupeKey]);
@@ -66,6 +85,17 @@ export const yieldRoutes = new Hono<AuthEnv>()
 		});
 		if (!out?.status) throw new ApiError(404, 'not found');
 		return c.json({ status: out.status, cancelled: out.changed });
+	})
+	// What the Yield panel offers for a dam (docs/api.md § Yield): its capacity in the run's or scenario's model (none:
+	// no firm yield, a curve only to an entered largest capacity), and the units of that model, each with whether it has
+	// irrigation demand to shape the draft. A contributor gets their own farm and the units their ops add.
+	.get('/:id/yield/options', async (c) => {
+		const q = OptionsQuery.parse(c.req.query());
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, c.req.param('id'), 'contributor');
+			const { input, visible } = await yieldTargetFor(db, c.req.param('id'), role, c.get('userId'), { ...q, kind: null }, { read: true });
+			return c.json(yieldOptions(input, q.nodeId, visible));
+		});
 	})
 	// Read under RLS from the job's own payload (water_app may SELECT a job of a
 	// project it can view), so no column mirrors it and GET /jobs stays payload-free.

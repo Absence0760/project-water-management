@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay, waterYearOf } from '../calendar';
 import type { DemandObject, ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
-import { firmYield, prepareYield, storageYieldCurve } from '../network/yield';
+import { firmYield, prepareYield, storageYieldCurve, YIELD_START_FULL_SHARE } from '../network/yield';
 import { testCatchment } from '../outlook/testCatchment';
 
 function series(out: ModelOutput, nodeId: string | null, key: string): number[] {
@@ -67,10 +67,18 @@ function failures(out: ModelOutput, nodeId: string): { days: number; years: numb
 
 const flat = (v: number) => new Array(12).fill(v) as number[];
 
+/**
+ * Farm A's dam starting the record as the yield search starts it, half full (YIELD_START_FULL_SHARE, engine
+ * 1.117.0), so a whole run of the model is the search's probe.
+ */
+const halfFull = (input: ModelInput): ModelInput => ({
+	...input,
+	model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'a' ? { ...n, damInitialPct: YIELD_START_FULL_SHARE } : n)) }
+});
 // 6 water years (two leap days), the farms' dams entered with their areas: evaporation and rain on the dam in play.
-const BASE = testCatchment({ start: '2002-10-01', end: '2008-09-30', seed: 3 });
+const BASE = halfFull(testCatchment({ start: '2002-10-01', end: '2008-09-30', seed: 3 }));
 // The same, but a part water year at each end: 2002/03 from 1 Apr, 2008/09 to 31 Dec.
-const PART = testCatchment({ start: '2003-04-01', end: '2008-12-31', seed: 3 });
+const PART = halfFull(testCatchment({ start: '2003-04-01', end: '2008-12-31', seed: 3 }));
 
 describe('outputs e2e: firm yield against whole runs (§2.13)', () => {
 	it('a constant draft at the firm yield never fails in runModel; the reported failing draft does', () => {
@@ -91,7 +99,7 @@ describe('outputs e2e: firm yield against whole runs (§2.13)', () => {
 		const out = runModel(withDraft(noDam, flat(0)));
 		const a = noDam.model.nodes.find((n) => n.id === 'a')!;
 		const inflow = series(out, 'a', 'inflow_upstream').reduce((s, v) => s + v, 0) + series(out, 'a', 'runoff').reduce((s, v) => s + v, 0);
-		const B = (inflow + a.damCapacityM3 * a.damInitialPct) / out.days;
+		const B = (inflow + a.damCapacityM3 * YIELD_START_FULL_SHARE) / out.days;
 		expect(y.boundM3Day).toBeCloseTo(B, 6);
 		expect(y.yieldM3Day).toBeLessThanOrEqual(B);
 	});
@@ -141,7 +149,7 @@ describe('outputs e2e: firm yield against whole runs (§2.13)', () => {
 	it('storage–yield: 11 capacities from 0 to 2 × the dam’s, the own-capacity point is the firm yield, capacity 0 is the smallest daily supply reaching the dam', () => {
 		const lossless = {
 			...BASE,
-			model: { ...BASE.model, nodes: BASE.model.nodes.map((n) => (n.id === 'a' ? { ...n, damAreaFullM2: 0, damMinPct: 0, damInitialPct: 1 } : n)) }
+			model: { ...BASE.model, nodes: BASE.model.nodes.map((n) => (n.id === 'a' ? { ...n, damAreaFullM2: 0, damMinPct: 0, damInitialPct: YIELD_START_FULL_SHARE } : n)) }
 		};
 		const p = prepareYield(lossless);
 		const curve = storageYieldCurve(p, 'a');
@@ -165,17 +173,17 @@ describe('outputs e2e: firm yield against whole runs (§2.13)', () => {
 		expect(y0).toBeGreaterThanOrEqual(min * (1 - 0.001) - 1e-6);
 	});
 
-	it('a lossless dam that drains a record shorter than its storage: the firm yield is (C + Σ inflow) ÷ days (the bound itself)', () => {
-		// Dry record: almost no inflow, a big full dam, no evaporating surface, no dead storage.
+	it('a lossless dam that drains a record shorter than its storage: the firm yield is (C / 2 + Σ inflow) ÷ days (the bound itself)', () => {
+		// Dry record: almost no inflow, a big dam starting half full, no evaporating surface, no dead storage.
 		const dry: ModelInput = {
 			...BASE,
 			settings: { ...BASE.settings, gr4j: { x1: 300, x2: 0, x3: 80, x4: 1.5, warmupDays: 0 } },
-			model: { ...BASE.model, nodes: BASE.model.nodes.map((n) => (n.id === 'a' ? { ...n, damAreaFullM2: 0, damMinPct: 0, damInitialPct: 1, damCapacityM3: 20_000_000 } : n)) },
+			model: { ...BASE.model, nodes: BASE.model.nodes.map((n) => (n.id === 'a' ? { ...n, damAreaFullM2: 0, damMinPct: 0, damInitialPct: YIELD_START_FULL_SHARE, damCapacityM3: 20_000_000 } : n)) },
 			series: { rain_catchment_mm: { startDate: '2002-10-01', values: new Array(730).fill(0) } }
 		};
 		const out = runModel(withDraft(dry, flat(0)));
 		const q = series(out, 'a', 'upstream_to_dam').map((v, t) => v + series(out, 'a', 'runoff_to_dam')[t]!);
-		const exact = (20_000_000 + q.reduce((s, v) => s + v, 0)) / out.days;
+		const exact = (YIELD_START_FULL_SHARE * 20_000_000 + q.reduce((s, v) => s + v, 0)) / out.days;
 		// A draft this size is above every day's inflow, so the dam never spills and the last day binds.
 		expect(Math.max(...q)).toBeLessThan(exact);
 		const y = firmYield(dry, 'a');
@@ -194,7 +202,7 @@ describe('outputs e2e: a resized dam in the yield search (§2.13)', () => {
 		for (const ratio of [0.5, 1, 2]) {
 			const cap = a.damCapacityM3 * ratio;
 			const area = a.damAreaFullM2! * ratio ** a.damAreaExponent;
-			const B = (inflow + (rainMm * area) / 1000 + a.damCapacityM3 * a.damInitialPct * ratio) / out.days;
+			const B = (inflow + (rainMm * area) / 1000 + a.damCapacityM3 * YIELD_START_FULL_SHARE * ratio) / out.days;
 			const y = firmYield(p, 'a', { capacityM3: cap });
 			expect(y.boundM3Day, `×${ratio}`).toBeCloseTo(B, 6);
 		}

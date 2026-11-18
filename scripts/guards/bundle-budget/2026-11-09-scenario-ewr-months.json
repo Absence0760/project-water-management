@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Scenario page's EWR months met side by side (ScenarioEwrMonths, ewrMonths.ts, EwrDailyMonthsPanel compact mode) and the scenario-run names in run pickers and the EWR page's scenario note. Measured 2466 KB on main @ 1b3e09fa1, 2469 KB with this change (+3 KB). Headroom 1 KB."
+}

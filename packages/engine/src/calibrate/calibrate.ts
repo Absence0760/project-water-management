@@ -37,7 +37,7 @@ import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { hasDailyEt0Value } from '../evaporation/et0Daily';
-import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, unitPetMm } from '../runoff/simulate';
 import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
 import { rainStationSummary } from '../runoff/stationForcing';
 import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
@@ -548,6 +548,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
+	// Each unit's PE as the run's (the A-pan per hydro unit, engine ≥ 1.117.0; the catchment PE for every unit without it).
+	const unitPet = perUnit ? unitPetMm(settings, { startDate, days, aligned }, perUnit.units, forcing.petMm) : null;
 	const usedRain = runRain(aligned, hasRain, days);
 	const rainFlags = usedRain ? rainDayFlags(aligned('rain_catchment_mm'), usedRain, run.rainSource?.column ?? null) : null;
 	// The warm-up cycles the full forcing's historical days, as runModel's does,
@@ -558,7 +560,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			// day's flow is runModel's to the bit.
 			// Under calibration locations only the fitted location's group takes the candidate; the rest keep their group's.
 			const paramsOf = locationParamsOf(locs, baseParams, { key: zoneNodeId, free: p as unknown as Gr4jParams });
-			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
+			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, unitPet!, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
 			natural.fill(0, 0, n);
 			perUnit.units.forEach((u, k) => {
 				const q = traces[k]!.qMm;

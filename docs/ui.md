@@ -4015,11 +4015,57 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 - On the Network tab a **Run** select picks the saved run of the model it
   works on (the newest by default; scenario runs aren't offered). With no
   run, it says to run the model first.
-- Editors pick a **Draft pattern** (constant, or this farm's irrigation
-  demand by month) and an **Assurance** (firm, 98, 95, 90 or 80 %), then
-  **Work out the yield** or **Storage–yield curve** (disabled, with a title
-  saying why, for a farm with no dam). Viewers see the results, and the
-  pattern and assurance for the preview below, with no run buttons.
+- Editors pick a **Draft pattern** and an **Assurance** (firm, 98, 95, 90
+  or 80 %), then **Work out the yield** or **Storage–yield curve**. The
+  Draft pattern lists Constant, then *This hydrological unit's irrigation
+  demand, by month* (shown disabled, "it has none: no crops or demand
+  objects", when the dam's own unit has none), then *<Unit>'s irrigation
+  demand, by month* for every other hydrological unit with irrigation
+  demand, in the model's order (engine ≥ 1.117.0, the hydrologist's request
+  2026-11-09: a proposed dam in a unit with no crops drafted to the shape of
+  the unit it would serve; `patternChoices` in `yield.ts`). The list, the
+  dam's capacity and what routes water into it come from the model the job
+  runs on, the run's or the scenario's (`GET …/yield/options`); until they
+  load, or if they can't be read (a muted line says so), it is Constant and
+  the dam's own. A choice the model no longer offers falls back to Constant.
+  Stored results name the shape by the unit's name when the job ran,
+  "(the unit now called …)" after a rename and "(that unit is no longer in
+  this model)" after a removal (`patternLabel`). **Curve up to (m³)**: the
+  curve's largest capacity, empty for twice the dam's (as every stored
+  curve without it reads), required for a unit with no dam. Viewers see the
+  results, and the pattern and assurance for the preview below, with no run
+  buttons.
+- **Half full at the start** (engine ≥ 1.117.0, model.md §2.13): the
+  panel's line under its title says the dam starts the record half full,
+  and each stored firm yield and curve says how it started: "half full" on
+  engine 1.117.0 or later, "at the dam's own initial storage (worked out
+  before engine 1.117.0 …)" before it (`startLabel` in `yield.ts`).
+- **A unit with no dam** in that model (capacity 0): an info note says
+  "<Unit> has no dam in this model (capacity 0 m³). In a scenario, add a
+  change that sets its dam capacity, then work out the yield.", with, on a
+  scenario the user may change, **Set its dam capacity in this scenario**
+  (Add a change on that unit's *Dam capacity*, prefilled and focused;
+  `OpForm.startChange`). No Work out the yield and no preview; the curve
+  sizes a proposed dam from 0 to the entered capacity (the dams start half full, as every yield's does,
+  and, with no area–volume relation to scale, have no surface: model.md
+  §2.13), and its line says "(sizing a proposed dam: the unit has no dam in
+  this model)". The API refuses the rest (`400 yield_no_dam`).
+- **A dam that receives no water** (Runoff to dam and Upstream inflow to dam
+  0 % or nothing upstream, no River to dam, no transfer in: engine
+  `damInflowRoutes`): a warning says "<Unit>'s dam receives no water in this
+  model: Runoff to dam is 0 % and Upstream inflow to dam is 0 %. In the
+  scenario, set the share of its runoff (and of the river above it) that the
+  dam catches.", with **Set its runoff to dam in this scenario**. Its yield
+  would be 0 at any size, so the panel offers no yield, curve or preview,
+  and the API refuses one (`400 yield_no_inflow`): a dam fed only by a
+  transfer or River to dam counts as receiving water, so nothing that could
+  yield is refused.
+- **A scenario's stored yield from earlier changes**: the job records the
+  scenario's ops hash (320); a firm yield or curve whose hash differs from
+  the scenario's now says "Worked out before the scenario's latest changes:
+  work it out again." (one from before 320: "Worked out before the scenario
+  was last changed, possibly on other changes …" when it predates the
+  scenario's last change; `staleNote`).
 - **Preview** (a dashed box, "Not stored"; issue #73, WP-3.6 through
   WP-1.17's preview worker): the firm yield for the pattern and assurance
   picked, worked out at once in the browser, off the main thread
@@ -5946,6 +5992,23 @@ The card's body holds three top-aligned groups:
   the catchment can't (the option says it needs a unit to deliver to). A
   rule saved with one curve (engine 1.113.0) shows that formula in every
   month; its first edit writes the rule's own monthly list.
+  *% of available flow* (the operator's ask for a client canal, 2026-11-10;
+  `transfers/TakesPercentByMonth.svelte`, rules in `transfers/percentOfFlow.ts`):
+  one diversion of a share of the river leaving the source, the rest left in
+  the river for the units below. A row per month, Oct to Sep, with **Share of
+  the flow, %** and **Canal capacity** (blank, or a 0 % share, = off), the
+  summary ("49 % of the flow, all year; the rest stays in the river") and
+  **Apply [month] to every month**. No new field: it is stored as the formula
+  by month with b = 0 and no largest share (a · x⁰ ÷ 100 = a %, whatever x's
+  unit), so the share is of U₀, the flow leaving the source after its own
+  use ([model.md §2.6a](./model.md)), never above the canal, and the
+  hands-off flow, the EWR when kept and its priority's sharing still apply
+  after it. A rule whose every running month is such a formula shows in this
+  mode; switching to it keeps those shares, starts the other months at 100 %
+  (up to their rate, as before) and sets the curve's unit to m³/s when it
+  has none (the model asks for one; it changes nothing at b = 0). The curve's
+  unit, basis and preview are hidden in this mode. From the dam it switches
+  **Takes from** to the river as a formula does.
 - **Max rate by month** (engine ≥ 1.14.0, `transfers/MonthRates.svelte`):
   twelve m³/s fields in water-year order, six to a row (four in a phone's
   card, all twelve in one row where the group is 58rem wide), each wide
@@ -7217,6 +7280,99 @@ editors run one now and read the map's proposals, viewers read.
   choose rnl). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
+- **Source: Weather station API** (owners; issue #784,
+  `feeds/StationApiFeedForm.svelte`, its own lazy chunk loaded when the
+  source is picked, helpers in `feeds/stationApi.ts`): a rainfall station
+  read from whatever web API its provider offers, into a rainfall station
+  series (Rainfall — catchment) named after it, so the card has no **Area**,
+  **Into series** or optional name. The fields, for a hydrologist rather
+  than a developer, in the order their provider's documentation reads,
+  under three small headings (*The API and the station*, *The key*, *How to
+  read the answer*) before the sample: **Start from a known API** (presets that only prefill
+  and say to check them against the provider's documentation: *Generic JSON
+  (daily totals)*, *Generic CSV (5-minute readings, Campbell-style
+  TIMESTAMP / Rain_mm_Tot)*, *Weather Underground PWS (daily)*; Ecowitt's
+  history API is left out, as it takes two keys and a feed sends one),
+  **The API's URL** (a text box that wraps, so a long URL reads whole; a
+  line break is dropped and Enter submits; its hint explains `{station}`,
+  `{start}` and `{end}` with an example, and a second line says when the
+  URL names no days), **Station ID**, **Station name** (the series name),
+  **How the key is sent**
+  (no key, Bearer token, in a header with its name and what goes before the
+  key, as a URL parameter by name, or user name and password) and the
+  **Key** (`type="password"`, `autocomplete="off"`). Above the key's
+  heading, one line says the owner is responsible for having the provider's permission
+  to fetch the station's data this way (their API terms; the request is
+  made with their key under their agreement, data-sources.md §
+  station-api; `data-testid="station-terms"`). A fold, **Requests:**,
+  holds how dates go in the URL (year-month-day by default, ISO, Unix
+  seconds or milliseconds, or a pattern), days per request (default 31),
+  days read again (default 7), the start date (default 90 days back) and up
+  to 8 **Extra headers**. **How to read the answer**: JSON (the path to the
+  records, *Records keyed by time*) or CSV (delimiter, lines to skip, *The
+  first line names the columns*), a decimal comma, the time and rain field
+  or column, the time format (a day, day and time, ISO, Unix seconds or
+  milliseconds, or a pattern) and time zone (default Africa/Johannesburg,
+  a typed IANA zone with a list of the region's), and **Readings** (one a day,
+  or within the day: when a rain day starts, default 08:00, which day it is
+  dated by, whether a reading's time marks the end or start of its interval,
+  and whether each reading is the interval's rain or a running total). A
+  second fold, **Values:**, holds the scale (25.4 for inches, the mm per tip
+  for tip counts), the missing markers, and whether a day with no readings
+  is a gap or 0 mm (a logger that reports only rain). Each fold's line says
+  its values (`requestLine`, `moreLine`). The form explains a bad URL (http,
+  a placeholder in the host, a port other than 443, a host that isn't a
+  public name, a key in its query, an unknown placeholder, a #fragment), a
+  missing key, station ID, header or field, and a start before 1 Jan 2000,
+  before anything is sent, in the form's order (URL, station ID, name,
+  key, …) and the server's words. The problem shows under its own field
+  (`role="alert"`, and the field's `aria-describedby`), which is marked
+  `aria-invalid` and focused, its fold opened first; with a pattern
+  chosen for the dates or times, the pattern's box takes the problem. The
+  server checks it all again: a 400's first issue lands on its field the
+  same way (`stationServerProblem` maps the body path, e.g.
+  `config.url` → the URL, a private address refused there), and so does a
+  409 for a series another feed writes (on the station name); one that
+  names no field (at most 10 station feeds a project, the source off) shows
+  in the card's error line above Attach feed. The server's messages name
+  the form's choices ("choose “In a header”", "“As a parameter in the
+  URL”"). Where the server takes none (the
+  list's `stationApiFeeds: false`, `STATION_API_FEEDS` off) the source is
+  listed disabled, "(off on this server)", with the note "Weather station
+  API feeds are off on this server: the operator switches them on."
+  (`data-testid="station-api-off"`); a feed already attached shows either
+  way. When POST or PATCH answers with a `warning` (a station feed that
+  sends a key with none saved), the panel's message adds it as "Note: …"
+  (`warningText`). The Source select names the off note as its
+  description. **Try it on a sample**:
+  "Paste what your provider’s API returns; nothing leaves your browser.", a
+  text box and **Try it**, which reads the answer in the browser with the
+  feed's own reader (`previewStationAnswer`, the engine's
+  `station-format`), so the preview and the fetch can't read it two ways:
+  "Read 3 records: 3 days, 2 with rain data and 1 gap." and a table of the
+  last 14 days, newest first, a gap written "gap", or the reader's message
+  ("The answer is a web page (HTML), not JSON: check the URL and the key.");
+  only the summary or the message is the live region, not the table.
+  The key is sent once with the attach (`credential`, never an empty one)
+  and never read back. Its card names the host and station, never the URL's
+  path or query ("station.example, station WS-01"), and says "Key saved ·
+  ends …0001" (the last four characters, for editors and owners and a key of
+  16 or more; plain "Key saved" otherwise) or "No key saved: the feed can’t sign in to its API until an
+  owner adds one." (`credentialLine`, `data-testid="feed-key"`). Owners get
+  **Replace key** (**Add a key** when none is saved; `aria-expanded`), a
+  small write-only form under the card's actions, named for what it does
+  ("Replace the key: …" or "Add a key: …") (New key, and the user name
+  for Basic; an empty key is refused, the field starts empty and is cleared
+  whatever the answer), and **Remove key** (after a confirm); editors and
+  viewers see the line and no key controls. History reads "Set up the
+  weather station API feed into the Rainfall — catchment “Hilltop” series,
+  key saved", "Replaced the key of …" and "Removed the key of …" from the
+  audit subject's `credential` (`history/timeline.ts`). On a phone
+  the form stacks with no sideways scroll (the form's own `.field` and
+  `select` rules: the panel's don't reach into the child component). Tested by
+  `stationApi.test.ts`, `feeds.test.ts` and `e2e/tests/station-api-feed.spec.ts`
+  (the synthetic station API on `station.example`; a phone test checks the
+  fit, axe and the off state).
 - **Attaching to a series that has data.** A feed keeps the values already
   in its series, uploaded or imported ones included, and fills only the days
   without one ([architecture.md § Data feeds](./architecture.md#data-feeds),
@@ -7741,7 +7897,8 @@ two.
   lazy): 12 S-pan months typed, or pasted with **Fill the months**, the
   equation picked (Taljaard's warning; one under its floor disabled with the
   month named), an optional note, and **Use as the A-pan**; **CCWR A-pan
-  grid (catchment average)** (`EvaporationProposal.svelte` pinned to
+  (Catchment)** (until 2026-11-09 "CCWR A-pan grid (catchment average)";
+  `EvaporationProposal.svelte` pinned to
   `Atlas-Apan-2007`, `evaporation/ccwrApan.ts`, lazy): Evaporation from the
   map's panel with its own heading and no grid picker, the WRC Atlas's
   modelled A-pan equivalent averaged over the catchment boundary into the
@@ -7750,7 +7907,18 @@ two.
   unsaved changes); when the server hasn't loaded that grid (production
   until issue #755, a fresh clone) it says "The CCWR A-pan grid isn’t loaded
   on this server" with the operator's import command, never another grid's
-  values; and **A DWS evaporation station** and **An evaporation grid**
+  values; **CCWR A-pan (Hydrological Unit)**
+  (`evaporation/UnitApanTable.svelte`, its own lazy chunk, a panel of that
+  name; the one **A-pan from** choice that is saved, as `settings.apanBasis`
+  `'units'`, so the save bar shows when it is picked and the select opens on
+  it; every other choice puts the basis back): **Use for each unit**
+  ("Saves now", asks first, waits only for other unsaved settings) saves the
+  units' rows and runs the model on them ([model.md §2.3b](./model.md)); each unit's 12 monthly means over its outline beside the catchment
+  average, its year and its difference from the catchment's year, the spread
+  in a sentence, and the units left out with why (under 90 % covered, no
+  outline, several parcels), which run on the covered units' area-weighted
+  mean ([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit));
+  the Runs tab's Run readiness lists them (`run-unit-apan`); and **A DWS evaporation station** and **An evaporation grid**
   (any other loaded grid: a PenPan A-pan, a reference-ET grid for GR4J's
   PE), each a link to its card on Calibration ([maps.md § WR2012
   evaporation by quaternary](./maps.md#wr2012-evaporation-by-quaternary),
@@ -8583,7 +8751,13 @@ The page has:
   pick follows the reader between the two pages (the sidebar carries `run=`,
   `workspace/tabLinks.ts` `RUN_TABS`). A select labelled **Run** with each
   run named as the other pages' pickers name it (`compare/picker.ts`
-  `runOptionLabel`, newest first, the newest marked *latest*), when it ran
+  `runOptionLabel`, newest first, the newest marked *latest*; a scenario's
+  run names its scenario, `runPickName`: "Hexberg Dam (scenario)" for a run
+  with the scenario's own label, "Hexberg Dam (scenario, as licensed)" for
+  a run of its licensed terms, "Wet years (scenario: Hexberg Dam)" for a
+  label of the user's own, the scenario's name cut at 32 characters; the
+  EWR page, Runs & results, Compare runs, Hydrological units and
+  Allocations name runs the same way), when it ran
   day first as the run line says it ("today 13:40", "3 Oct 2026 09:12",
   `fmtWhen`); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
@@ -9547,6 +9721,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   "today 13:40", `fmtWhen`, issue #586 R4-F); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+  A scenario's run (also once its scenario is deleted, `isScenarioRun`) says
+  so in a line at the top of the page (`river.ts` `scenarioRunNote`):
+  "Scenario run: Hexberg Dam, against the base run Baseline (today 13:40).",
+  with **Show the base run** (`?tab=river&run=<base>`, the base its snapshot
+  recorded, `RunMeta.scenarioBaseRunId`, while it is still in the list) and
+  **Open the scenario** (while the scenario exists).
   While the picked run's record loads, the page keeps the run before it on
   screen, its body `aria-busy="true"`, then swaps (a cached record at once):
   until 2026-10-24 every panel unmounted for at least a render on each pick,
@@ -9743,7 +9923,20 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the deficit (Mm³), a line when months met had a daily EWR of 0 all month
   (they count as met), the share of months met per month of the year as
   bars, and a table by month of the year (years, met, met %, mean required
-  and mean simulated m³/s, deficit Mm³). A run with a rule table too has a
+  and mean simulated m³/s, deficit Mm³). **At** (`ewr/EwrUnitPick.svelte`,
+  shown when the run has a unit with an EWR share; the operator's ask of
+  2026-11-10) judges the same panel at a hydrological unit instead of the
+  outlet: each whole month is met when the flow leaving the unit (its
+  `outflow`, after its abstractions) is at least the EWR required at it
+  (`ewr_cumulative`, Z: the daily EWR in use times its share plus the shares
+  of the units above it, [model.md §2.11c](./model.md)) summed over the
+  month, by the engine's own test (`assessDailyEwrMonths`). The figures are
+  worked out on the page from those two stored series
+  (`ewr/unitMonths.ts`, `ewr/EwrDailyMonthsAt.svelte`, through the Runs
+  series cache), so every run from engine 1.116.0 has them without a
+  re-run; the verdict, the explanation and the chart's name say the unit's
+  name, and *The outlet* goes back. A run made before 1.116.0 offers no
+  units. A run with a rule table too has a
   **Judged by** switch under the heading (a `.seg` of two `aria-pressed`
   buttons, the daily EWR's name and *Reserve rule tables*); which shows
   first is `river.ts` `monthsJudge`: the reader's pick, else the daily EWR,
@@ -12373,7 +12566,8 @@ workspace save bar never shows it, Record is disabled with "1 problem in
 the tables to fix before recording." and the field listed under it as a
 link (**Fix before recording:**), it counts as unrecorded for leaving and
 closing, and **Discard edits** puts it back. **Edits to record**
-  (sticky at the foot on wide screens) lists each edit as the change it will
+  (sticky at the foot on wide screens, above the workspace save bar while
+  that shows) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
   change can express (a node's kind, the outlet moved…) is
@@ -12381,7 +12575,13 @@ closing, and **Discard edits** puts it back. **Edits to record**
   crop removed and what a node drains into record from engine 1.35.0, and a
   demand object added, changed or removed, its schedule and people served
   included, from engine 1.45.0); the
-  tables' own problems ("Fix before saving") block it too. While there are
+  tables' own problems ("Fix before saving") block it too. On wide
+  screens each table's box (`.table-wrap`, 70vh elsewhere) is capped to the
+  window less the record bar's measured height and the save bar
+  (`--table-wrap-max`), so scrolling the page brings a whole box, its
+  sideways scrollbar and last row included, clear of both: a wide node table
+  at 1280 had its scrollbar under the bar at every scroll position
+  (2026-11-09, `scenarios-page.spec.ts`). While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an
   application's Submit, Withdraw, Reopen and decision included) also wait
@@ -12502,10 +12702,38 @@ closing, and **Discard edits** puts it back. **Edits to record**
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
-  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab). Only the
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab), and **EWR for
+  this run** and **EWR for the base run** (`riverHref`, the EWR page on the
+  scenario's run or on the base run the comparison used: the operator, on
+  2026-11-09, couldn't find a scenario's run on the EWR page). Only the
   assessors see this section; an applicant gets a note instead
   ([§ Applications](#applications-wp-33)). A note says when the changes were
-  edited since that run. Under the comparison, the scenario run's
+  edited since that run. Under the headline results, **EWR months met: base
+  against a run** (`ScenarioEwrMonths.svelte`, the operator's ask of
+  2026-11-09, for presenting a scenario): the EWR page's months-met panel for
+  the daily EWR in use (`ewr/EwrDailyMonthsPanel.svelte` in its `compact`
+  mode: an h4 with the run's name and date, the tiles Months met, Longest
+  run not met and Deficit in one row without their long explanations, then
+  the chart on a narrower 360-unit width, then the verdict, the table folded
+  under **Values by month**) twice: the base run the comparison used on the
+  left ("Base: …"), and on the right the run a **Run on the right** select
+  picks from the project's runs but the base (named as the other run
+  pickers name them, newest first), the scenario's latest run by default
+  (`scenarios/ewrMonths.ts` `rightChoices`, `rightRun`). One component on
+  both sides, so the 0–100 % axis, the bars' colours and the month order
+  match, and the tiles come first so they line up whatever the verdicts
+  say. Side by side from 44rem of the section (a container query; 1280 and
+  1440 windows), stacked under that. A line above them names the daily EWR
+  both are judged by, as the EWR page names it; when the two runs judged
+  different ones, a warning says so instead (`judgedBy`). One **At** select
+  under **Run on the right** (the EWR page's, above) judges both sides at the
+  outlet or at one hydrological unit, offering the units with an EWR share in
+  either run, so a scenario's effect on the river below a unit reads against
+  its base; the line above names the place. A unit the scenario added says
+  "<Name> isn’t in this run." on the base's side. A run made before
+  engine 1.116.0 says "Run the model again to see this for the daily EWR."
+  on its side, the base side with a **Run the model** link (`?tab=runs`).
+  Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is

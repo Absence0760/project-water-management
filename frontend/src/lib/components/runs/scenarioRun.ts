@@ -15,3 +15,14 @@ export type ScenarioRunFields = Partial<Pick<RunMeta, 'fromScenario' | 'scenario
 export function isScenarioRun(r: ScenarioRunFields): boolean {
 	return r.fromScenario ?? (!!r.scenarioId || !!r.scenarioName);
 }
+
+/**
+ * The scenario that made a run, to name it or link to it: null for a run of
+ * the model (isScenarioRun); `id` null once the scenario is deleted (the run
+ * keeps the name it recorded). The one place outside the API types that reads
+ * a run's `scenarioId`.
+ */
+export function runScenario(r: ScenarioRunFields): { id: string | null; name: string | null } | null {
+	if (!isScenarioRun(r)) return null;
+	return { id: r.scenarioId ?? null, name: r.scenarioName?.trim() || null };
+}

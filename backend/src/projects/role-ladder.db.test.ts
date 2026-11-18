@@ -201,6 +201,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/runs/:runId/future-yield', { min: 'contributor', why: 'the newest § 8 result RLS lets the caller read (a contributor: their own application’s)' }],
 	['GET /projects/:id/jobs', { min: 'contributor', why: 'the job status list RLS lets the caller read (a contributor: their own yield jobs, 096), so the Yield panel follows one' }],
 	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],
+	['GET /projects/:id/yield/options', { min: 'contributor', why: 'a dam’s capacity and the units that can shape its draft, in the model the caller may run a yield on (a contributor: their own application’s units)' }],
 	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }],
 	// The applicant's appointed specialist (167_signers): a draft pack of their party's application, through app_specialist_pack.
 	['GET /projects/:id/packs/:packId/signoffs', { min: 'contributor', why: 'the sign-off statement of a draft pack the caller may sign as the application’s appointed specialist; any other contributor 403' }],
