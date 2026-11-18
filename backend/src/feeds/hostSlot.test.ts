@@ -58,7 +58,7 @@ describe('CHC request slot (feeds/hostSlot.ts)', () => {
 		expect(hostSlotKey('chc')).toBe(KEY);
 		expect(slotHostFor('chirps')).toBe('chc');
 		expect(slotHostFor('chirps_gefs')).toBe('chc');
-		for (const s of ['dws', 'ecmwf_ens', 'agera5_et0'] as const) expect(slotHostFor(s)).toBeNull();
+		for (const s of ['dws', 'ecmwf_ens', 'agera5_et0', 'station_api'] as const) expect(slotHostFor(s)).toBeNull();
 	});
 
 	it('has no slot without a copy, or in the committed synthetic one: callers go on as before', () => {

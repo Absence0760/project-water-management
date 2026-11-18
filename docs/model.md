@@ -4028,7 +4028,7 @@ The workbook has two blocks of columns:
   though it would release water that day. A *pass-inflow* release
   isn't counted: it is at most the day's inflow, which the room doesn't
   count either (transfers are settled before the day's flows are known).
-  **Engine ≥ 1.31.0 ([issue #200](https://github.com/Absence0760/project-water-management/issues/200))**
+  **Engine ≥ 1.31.0 ([issue #200](https://github.com/jaredhoward-dev/project-water-management/issues/200))**
   replaces `D[dst][t]` in the room with the most the dam can be drawn for
   it that day:
 

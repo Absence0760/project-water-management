@@ -2,7 +2,7 @@
 
 The scheduled job that copies upstream rain data into **our own copy**, so the
 app never fetches from someone else's server because a feed or a user asked
-(issue #604, "The rule"). Python 3.14, run as an arm64 container-image Lambda
+(issue #604, "The rule"). Python 3.15, run as an arm64 container-image Lambda
 (D11), since NetCDF/HDF5 has no good Node reader. The daily TIFF and DWS
 ingest stay in Node (`backend/`).
 
@@ -702,7 +702,7 @@ written as `0x7FC00000`. When a file is copied again:
 
 `polite.PoliteClient` is the only way this job reaches the network:
 
-- **User-Agent:** `water-management-ingest/1 (+https://github.com/Absence0760/project-water-management; <INGEST_CONTACT>)`.
+- **User-Agent:** `water-management-ingest/1 (+https://github.com/jaredhoward-dev/project-water-management; <INGEST_CONTACT>)`.
 - **Conditional GETs:** it sends `If-None-Match` and `If-Modified-Since`, and a 304 means the file is skipped.
 - **Pacing:** at most one request a second (`min_interval`), retries included, and one request at a time.
 - **Range requests:** `byte_range=(first, last)` sends `Range` for a few pixels of a TIFF (`verify_copy.py`), paced like any request.
@@ -808,7 +808,7 @@ ingest/dev.sh cmip6 copy     # … and the copy itself, into ingest/.mirror
 ```
 
 `dev:ingest:run` only writes to a `file://` copy and refuses an `s3://`
-`MIRROR_URL`. `PYTHON=<interpreter>` picks another Python 3.14.
+`MIRROR_URL`. `PYTHON=<interpreter>` picks another Python 3.15.
 
 ## Tests
 
@@ -929,7 +929,7 @@ writes one by hand.
 docker buildx build --platform linux/arm64 -f ingest/Dockerfile ingest
 ```
 
-- **Base:** AWS's Lambda Python 3.14 image, using the arm64 tag pinned by
+- **Base:** AWS's Lambda Python 3.15 image, using the arm64 tag pinned by
   digest.
 - **User:** `USER 65534` (nobody), so the image never runs as root (Trivy
   DS-0002; `test_lambda_handler.py` checks it). Lambda runs it as its own
@@ -939,7 +939,10 @@ docker buildx build --platform linux/arm64 -f ingest/Dockerfile ingest
   `public.ecr.aws/lambda/python:<version>-arm64@sha256:…`, and a
   `pip install` without `--require-hashes`.
 - **Moving the digest:** look it up with
-  `docker buildx imagetools inspect public.ecr.aws/lambda/python:3.14-arm64`.
+  `docker buildx imagetools inspect public.ecr.aws/lambda/python:3.15-arm64`.
+  Moving the Python version moves CI's ingest job (`.github/workflows/ci.yml`,
+  `python-version`) and `dev.sh`'s default interpreter with it, so the tests
+  run on the version Lambda runs.
   Dependabot's docker entry for `/ingest` proposes the same move.
 - **Python dependencies:** they move through Dependabot's pip entry for
   `/ingest`, and `requirements.txt`'s header explains how to regenerate the

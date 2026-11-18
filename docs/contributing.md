@@ -47,7 +47,7 @@ This repo started from a template branch in the `templates` repo. Its `base`
 branch owns the shared scaffolding; a rule worth applying to every project is
 proposed there, not forked here.
 
-- `.github/workflows/gitleaks.yml` — secret scanning
+- `.github/workflows/secret-scan.yml` — secret scanning (TruffleHog)
 - `.github/workflows/audit.yml` — weekly `pnpm audit` + auto-issue
 - `.github/workflows/security.yml` — CodeQL static analysis + container scanning
 - `.github/workflows/scorecard.yml` — OSSF Scorecard

@@ -1,6 +1,6 @@
 # Design: the licensing evidence report
 
-Design spec for [issue #15](https://github.com/Absence0760/project-water-management/issues/15):
+Design spec for [issue #15](https://github.com/jaredhoward-dev/project-water-management/issues/15):
 what a water-use licence assessor at a CMA needs from a nominated run, in
 what order, and how uncertainty and assumptions are shown so the report
 can't be gamed. It feeds

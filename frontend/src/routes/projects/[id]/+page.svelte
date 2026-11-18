@@ -485,6 +485,10 @@
 	// page's own (warnings/problems.ts), less those kept. Null, no badge, until the checks are counted or a read failed.
 	let warningsOpen = $state<number | null>(null);
 	let feedProblems = $state.raw<FeedProblem[]>([]);
+	// True once this page's idle-time reads (the count and the feeds) have both answered or failed, or once there is
+	// nothing to read for this role: `data-warnings-ready` on <main>, so a test can wait for them instead of leaving
+	// them in flight (a full page load would cancel them; e2e repeated-loads.spec.ts).
+	let warningsSettled = $state(false);
 	const otherProblems = $derived(
 		problems({ issues: editor.issues, blockers: settings.blockers, feeds: feedProblems, behind: fresh?.behind, runs, role: project?.role })
 	);
@@ -495,27 +499,30 @@
 		const r = runs;
 		if (!p || !list || !r || !['owner', 'editor', 'viewer'].includes(p.role ?? '')) {
 			warningsOpen = null;
+			// Not loaded yet: the reads are still to come. Loaded, for a role that has no Warnings count: none will be made.
+			warningsSettled = !!(p && list && r);
 			return;
 		}
+		warningsSettled = false;
 		const id = projectId;
 		const runId = defaultRunId(r, p.role);
 		const nodeName = (n: string) => untrack(() => editor.model.nodes.find((x) => x.id === n)?.name ?? null);
 		let gone = false;
 		const go = () =>
-			loadWarningCount().then((m) => {
-				m.openWarningCount(id, list, p.settings, runId, nodeName).then(
-					(n) => {
-						if (!gone) warningsOpen = n;
-					},
-					() => {}
-				);
-				m.loadFeedProblems(id).then(
-					(f) => {
-						if (!gone) feedProblems = f;
-					},
-					() => {}
-				);
-			});
+			loadWarningCount()
+				.then((m) =>
+					Promise.allSettled([
+						m.openWarningCount(id, list, p.settings, runId, nodeName).then((n) => {
+							if (!gone) warningsOpen = n;
+						}),
+						m.loadFeedProblems(id).then((f) => {
+							if (!gone) feedProblems = f;
+						})
+					])
+				)
+				.finally(() => {
+					if (!gone) warningsSettled = true;
+				});
 		const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback(go, { timeout: 4000 }) : null;
 		const timer = idle === null ? setTimeout(go, 1500) : null;
 		return () => {
@@ -1158,6 +1165,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <main
 	class="page"
+	data-warnings-ready={warningsSettled ? 'true' : undefined}
 	style:--dock-h="{saveBarHeight}px"
 	ondragenter={onDragEnter}
 	ondragover={onDragOver}

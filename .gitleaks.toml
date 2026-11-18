@@ -56,4 +56,13 @@ regexes = [
   # A model setting's name after "key:" (issue #640, the assistant's propose_settings test), reviewed 2026-10-28:
   # generic-api-key matched it in backend/src/assistant/tools/proposeSettings.test.ts.
   '''^ewrPragmaticM3PerDay$''',
+  # Station API feeds (issue #784), reviewed 2026-11-16: the committed dev-only X25519 private key in
+  # backend/.env.development (it decodes to the bytes "dev-only-feed-credential-key-000", and production refuses it,
+  # config/production.ts), and invented keys in the feed tests (sources/station.test.ts, stationHttp.test.ts,
+  # stationApiFeed.db.test.ts) that stripe-access-token and generic-api-key read as real.
+  '''^ZGV2LW9ubHktZmVlZC1jcmVkZW50aWFsLWtleS0wMDA$''',
+  '''^sk_live_0123456789abcdefXYZ$''',
+  '''^sk_test_abcdefghijklmnop$''',
+  '''^pk_live_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t$''',
+  '''^replacement-secret-9876543210-abcd$''',
 ]

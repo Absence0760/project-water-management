@@ -13,7 +13,8 @@
 //                          that queue their own work, so they never run
 //                          another spec's feed)
 //   --once --project <id>  (repeatable) one tick that claims only those
-//                          projects' jobs: the e2e suite's tick
+//                          projects' jobs, and schedules only their feeds:
+//                          the e2e suite's tick
 //                          (e2e/support/jobs.ts), so a test never runs, or
 //                          sees running, a job another test queued in the
 //                          shared e2e database

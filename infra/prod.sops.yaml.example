@@ -35,7 +35,7 @@ alerts_token_secret: "REPLACE_ME"
 
 # Signs report download links (CloudFront signed URLs, infra/reports.tf; the
 # API only): an RSA 2048 private key, PEM, as a block scalar. Generate it
-# outside any repo, put it here, put its PUBLIC half in prod.tfvars
+# outside any repo, put it here, put its PUBLIC half in prod.tfvars.sops
 # (report_download_public_keys + report_download_signing_key), then delete
 # the file:
 #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out report-downloads.key
@@ -52,3 +52,12 @@ cloudfront_private_key: |
 # up again (the operator clears user_totp first; docs/security.md § Two-step
 # sign-in), so rotate only if it leaked.
 app_encryption_key: "REPLACE_ME"
+
+# OPTIONAL, only with station_api_feeds = true (issue #784): the fetcher's
+# X25519 private key, which opens the credentials owners save for station API
+# feeds (backend/src/feeds/credential.ts; the fetcher's runtime secret only).
+# `pnpm gen:feed-credential-key` prints the pair: this half here, the public
+# half in prod.tfvars.sops (feed_credential_public_key). 43 base64url characters.
+# tf.sh passes it when present; leave it out while station API feeds are off.
+# Rotating it voids every saved station key (each owner enters theirs again).
+# feed_credential_private_key: "REPLACE_ME"

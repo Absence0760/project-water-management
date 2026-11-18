@@ -189,7 +189,8 @@ const FEED_LABELS: Record<string, string> = {
 	chirps_gefs: 'CHIRPS-GEFS rainfall forecast',
 	dws: 'DWS gauge flow',
 	ecmwf_ens: 'ECMWF ENS rainfall forecast',
-	agera5_et0: 'AgERA5 daily reference evapotranspiration'
+	agera5_et0: 'AgERA5 daily reference evapotranspiration',
+	station_api: 'Weather station API'
 };
 
 /**

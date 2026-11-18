@@ -25,19 +25,19 @@
 # run and test use ingest/.venv (gitignored), created on first use from the
 # hash-pinned requirements.txt and refreshed whenever that file changes;
 # verify uses ingest/.venv-verify from requirements-verify.txt the same way.
-# Needs Python 3.14 (PYTHON=<interpreter> to pick another). Optional tooling,
+# Needs Python 3.15, the Lambda image's (PYTHON=<interpreter> to pick another). Optional tooling,
 # like gen:help-art: pnpm dev, CI's other jobs and e2e never need Python.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 venv="$here/.venv"
-py="${PYTHON:-python3.14}"
+py="${PYTHON:-python3.15}"
 
 ensure_venv() {
 	local venv="${1:-$venv}" req="${2:-$here/requirements.txt}"
 	if [ -x "$venv/bin/python" ] && cmp -s "$req" "$venv/.requirements.txt"; then return; fi
 	if ! command -v "$py" >/dev/null; then
-		echo "ingest: $py not found; install Python 3.14 or set PYTHON=<interpreter>" >&2
+		echo "ingest: $py not found; install Python 3.15 (sudo dnf install python3.15) or set PYTHON=<interpreter>" >&2
 		exit 1
 	fi
 	echo "ingest: installing $req into $venv" >&2

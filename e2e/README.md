@@ -287,7 +287,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run, and the seeded farmer reading their published farm and Sandspruit's advisory notice |
 | `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |
 | `tests/help.spec.ts` | The in-app help system: network-table tips stay unclipped and close on Escape/outside click, neighbouring tips show a close-up with the feature ringed, the sidebar follows the section being read (folding behind a button on a phone), the catchment tour links picture markers to their stops, a guide shows a close-up with its own numbered stops and its diagrams and links into the glossary, search finds guides and glossary terms as you type, an old `/help#term` link lands on the glossary entry, and an unknown guide says so and links back to help |
-| `tests/repeated-loads.spec.ts` | Six full loads of the Settings tab in a row, with no failed request or page error (the dev-server resource-exhaustion regression) |
+| `tests/repeated-loads.spec.ts` | Six full loads of the Settings tab in a row, with no failed request or page error (the dev-server resource-exhaustion regression); each load waits for the page's own reads (the unit MAP proposal's `data-ready`, `<main data-warnings-ready>`) so the next load never cancels one |
 | `tests/a11y.spec.ts` | axe WCAG 2.2 A/AA scan of every page (sign-in pages, emailed-link dead states, project list, teams, a team, help, compare), every workspace tab, dialogs, save bar, one-node form, view-only workspace and a signed-in invitation, in light and dark; GR4J settings with a monthly PE row; every tab again at phone width; sideways-scrolling boxes take focus and scroll by keyboard. One page state per test, so each scan has the 30 s budget to itself; a positive control proves the scan still reports violations; every tab (desktop and phone) and a GR4J run are also checked for axe's `empty-table-header` and `landmark-unique` |
 
 ## Rules for writing specs
@@ -312,7 +312,8 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   actually about. Everything else goes through `support/api.ts`.
 - **Wait on real UI signals**: a heading, a status message, a table row, an
   `aria-current`, a response (`page.waitForResponse`), an app readiness
-  attribute (a chart's `data-ready`; after a resize, the Network map's
+  attribute (a chart's `data-ready`, the project page's
+  `data-warnings-ready` on `<main>`; after a resize, the Network map's
   `data-fit` through `waitForMapFit` in `support/diagrams.ts`). Never use
   `networkidle`, never `waitForTimeout`, and never inflate a timeout to get past
   a slow step. Fix whatever is slow.
@@ -361,7 +362,10 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   queued jobs, so a test asserting "Queued" (a yield, a sweep, an outlook, a
   due re-run) saw "Running…". Pass `schedule: false` unless the test needs
   the feed schedule (only `data-feeds.spec.ts`, which runs its tests one at
-  a time because that schedule looks at every project).
+  a time). That schedule is scoped like the claim, to the named projects'
+  due feeds: a new feed is due at once, and an unscoped schedule queued
+  other specs' feeds (and, with "Run now" pressed at that moment, hit the
+  claim deadlock 322 fixed; issue #784).
 - `timezoneId` is pinned to `UTC`, so date output is deterministic.
 - **Fixtures are synthetic.** The repo is public, so never commit client names,
   values or workbook-derived data.
