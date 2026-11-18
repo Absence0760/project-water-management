@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Dependabot #801 (11 minor-and-patch bumps, all but vite) grew the frontend by 1 KB and turned main's check:bundle red. Measured locally on main @ 02860542c: total 2506 KB against 2505 (+1 KB), the same as CI on runs 44129398857 and 44156974959. Headroom 0 KB."
+}
