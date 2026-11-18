@@ -7590,7 +7590,10 @@ linking to where it is fixed; and the shown run's warnings.
   then too, with the run's open warnings (`runWarnings.ts` `runWarningState`,
   as the page reads them), plus the problems the page holds itself, less the
   kept ones (`problems.ts` `badgeCount`). No badge until the checks are
-  counted, or when a read fails.
+  counted, or when a read fails. Once both idle-time reads have answered or
+  failed (or the role has no count to read), the page's `<main>` carries
+  `data-warnings-ready="true"`, so a test can wait for them rather than cancel
+  them with its next load (`e2e/tests/repeated-loads.spec.ts`).
 - Tested by `e2e/tests/warnings.spec.ts` (chips and the record picker in the
   URL with Back, one title, the sidebar row and its count, the source chips
   and the problems elsewhere, a row's Patch and Exclude
