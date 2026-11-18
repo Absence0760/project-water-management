@@ -267,6 +267,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 1 }))).toBe(
 			'Gave the CHIRPS feed the cells of the catchment boundary “Sandspruit catchment” (1 cell)'
 		);
+		// A station API feed's key (issue #784): saved, replaced or cleared, never the key itself.
+		const st = { source: 'station_api', targetKind: 'rain_catchment_mm', targetName: 'Hilltop' };
+		expect(eventLine(ev('feed.configured', { action: 'created', ...st, credential: 'saved' }))).toBe('Set up the weather station API feed into the Rainfall — catchment “Hilltop” series, key saved');
+		expect(eventLine(ev('feed.configured', { action: 'changed', ...st, credential: 'replaced' }))).toBe('Replaced the key of the weather station API feed');
+		expect(eventLine(ev('feed.configured', { action: 'changed', ...st, credential: 'cleared' }))).toBe('Removed the key of the weather station API feed');
+		expect(eventLine(ev('feed.configured', { action: 'changed', ...st, credential: true }))).toBe('Saved a key for the weather station API feed');
+		expect(eventLine(ev('feed.configured', { action: 'changed', ...st, enabled: false }))).toBe('Changed the weather station API feed (switched off)');
 		// Rain for each unit (issue #482): one entry for the action, naming its units.
 		const units = ['Upper', 'Middle', 'Lower', 'Spring'].map((name, i) => ({ nodeId: `n${i}`, name, feedId: `f${i}`, action: i ? 'created' : 'updated', cells: 2 }));
 		expect(eventLine(ev('feed.configured', { action: 'units', source: 'chirps', targetKind: 'rain_chirps_mm', product: 'rnl', startDate: '1981-01-01', created: 3, updated: 1, units }))).toBe(

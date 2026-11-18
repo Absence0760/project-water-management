@@ -950,11 +950,12 @@ run "runtime_secrets" {
   # Exactly the keys each role uses (RUNTIME_SECRETS in backend/src/config/runtimeSecrets.ts).
   assert {
     condition = (
-      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker", "assistant"]) &&
+      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker", "assistant", "fetcher"]) &&
       toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY", "APP_ENCRYPTION_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
       toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"]) &&
-      toset(keys(local.runtime_secrets.assistant)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"])
+      toset(keys(local.runtime_secrets.assistant)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"]) &&
+      toset(keys(local.runtime_secrets.fetcher)) == toset(["FEED_CREDENTIAL_PRIVATE_KEY"])
     )
     error_message = "Each runtime secret holds exactly its Lambda's keys: the download signing key and the TOTP sealing key for the API only (the edge secret for the API and the assistant), the unsubscribe key for the worker only, the water_app password for migrate only."
   }
@@ -1036,7 +1037,7 @@ run "runtime_secrets" {
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "RUNTIME_SECRET_ARN")
-    error_message = "The fetcher holds no secret."
+    error_message = "The fetcher holds no secret while station API feeds are off (the default; cutover.tftest.hcl covers on)."
   }
   assert {
     condition     = alltrue([for k, v in aws_secretsmanager_secret.runtime : v.name == "water-management/runtime/${k}"])
@@ -2339,9 +2340,10 @@ run "data_feeds" {
       aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
       aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results[0].url &&
       aws_lambda_function.fetcher.environment[0].variables["MIRROR_URL"] == "s3://${aws_s3_bucket.mirror.bucket}" &&
-      length(aws_lambda_function.fetcher.environment[0].variables) == 4
+      aws_lambda_function.fetcher.environment[0].variables["STATION_API_FEEDS"] == "off" &&
+      length(aws_lambda_function.fetcher.environment[0].variables) == 6
     )
-    error_message = "The fetcher gets the live sources, the ingest-results queue, the mirror its daily ingest writes (issue #604 R2-B) and the user agent's contact, and nothing else (no DATABASE_URL, no secrets)."
+    error_message = "The fetcher gets the live sources, the ingest-results queue, the mirror its daily ingest writes (issue #604 R2-B), the user agent's contact and station API feeds' switch and public key (off and empty by default, issue #784), and nothing else (no DATABASE_URL, no secrets)."
   }
   assert {
     condition = (

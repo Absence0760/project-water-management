@@ -77,6 +77,14 @@ budget_alert_email = "you+aws-alerts@example.com"
 # template address, as for budget_alert_email.
 feeds_contact = "you@example.com"
 
+# Station API feeds (issue #784; docs/deployment.md § Station API feeds): a
+# rainfall station's data fetched from its provider's own web API. Off by
+# default. To turn on, run `pnpm gen:feed-credential-key` on your own machine:
+# its public half goes here, its private half into prod.sops.yaml
+# (feed_credential_private_key); plan refuses on without both.
+# station_api_feeds          = true
+# feed_credential_public_key = "<43 characters from gen:feed-credential-key>"
+
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
 # keeps 10 unreserved, so ANY reservation fails until the quota is raised:
 # raise it BEFORE the first apply to at least the sum of these + 10 (48 at the
@@ -87,7 +95,7 @@ feeds_contact = "you@example.com"
 lambda_reserved_concurrency  = 25
 migrate_reserved_concurrency = 1
 # worker_reserved_concurrency   = 8 # at least 8: its four SQS triggers x 2
-# fetcher_reserved_concurrency  = 2
+# fetcher_reserved_concurrency  = 2 # + 2 more reserved while station_api_feeds is on (their own trigger)
 # renderer_reserved_concurrency = 2
 
 # Issued evidence packs' PDFs (packs.tf): Object Lock default retention in

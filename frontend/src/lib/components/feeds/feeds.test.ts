@@ -42,6 +42,10 @@ import {
 	STATE_LABELS,
 	parseCells,
 	separateName,
+	credentialLine,
+	credentialPatch,
+	warningText,
+	stationApiHost,
 	takeoverOf
 } from './feeds';
 
@@ -650,5 +654,67 @@ describe('gapFillNote', () => {
 		expect(gapFillNote({ gapEra5l: 'failed:refused', gapImergLate: 'failed:unavailable' })).toBe('couldn’t fill ERA5-Land or IMERG Late');
 		expect(gapFillNote({ gapEra5l: 'ok', gapImergLate: 'not_ready' })).toBeNull();
 		expect(gapFillNote(null)).toBeNull();
+	});
+});
+
+describe('station API feeds (issue #784)', () => {
+	const url = 'https://station.example/daily.json?station={station}&from={start}&to={end}';
+	const station = (over: Partial<Parameters<typeof credentialLine>[0]> = {}) => ({
+		source: 'station_api' as const,
+		config: { url, station: 'WS-01', auth: { kind: 'bearer' as const } },
+		credential: { saved: true, hint: 'abcd', updatedAt: '2026-11-15T08:00:00Z' },
+		...over
+	});
+
+	it('names the host and station on the card, never the URL’s path or query', () => {
+		expect(describePlace(station())).toBe('station.example, station WS-01');
+		expect(describePlace({ source: 'station_api', config: { url: 'https://api.weather.com/v2/pws?x={start}' } })).toBe('api.weather.com');
+		expect(describePlace({ source: 'station_api', config: {} })).toBe('its API');
+		expect(stationApiHost('not a url')).toBeNull();
+	});
+
+	it('says whether a key is saved and how it ends, never the key', () => {
+		expect(credentialLine(station())).toBe('Key saved · ends …abcd');
+		expect(credentialLine(station({ credential: { saved: true, hint: '…wxyz', updatedAt: null } }))).toBe('Key saved · ends …wxyz');
+		expect(credentialLine(station({ credential: { saved: true, hint: null, updatedAt: null } }))).toBe('Key saved');
+		expect(credentialLine(station({ credential: { saved: false, hint: null, updatedAt: null } }))).toMatch(/^No key saved/);
+		// No key needed and none saved: nothing to say.
+		expect(credentialLine({ source: 'station_api', config: { url, auth: { kind: 'none' } }, credential: { saved: false, hint: null, updatedAt: null } })).toBeNull();
+		expect(credentialLine({ source: 'chirps', config: {} })).toBeNull();
+	});
+
+	it('replaces a key only with a non-empty one, with a user name for basic', () => {
+		expect(credentialPatch('  ', '', false)).toEqual({ error: 'Enter the new key.' });
+		expect(credentialPatch('', 'ann', true)).toEqual({ error: 'Enter the new password.' });
+		expect(credentialPatch(' new-key-1 ', 'ignored', false)).toEqual({ credential: { secret: 'new-key-1' } });
+		expect(credentialPatch('short12', '', false)).toEqual({ error: 'The key is at least 8 characters.' });
+		expect(credentialPatch('pw', 'ann', true)).toEqual({ error: 'The password is at least 8 characters.' });
+		expect(credentialPatch('password1', ' ann ', true)).toEqual({ credential: { secret: 'password1', user: 'ann' } });
+		expect(credentialPatch('password1', '', true)).toEqual({ credential: { secret: 'password1' } });
+	});
+
+	it('suggests a separate series named after the station', () => {
+		const body = { source: 'station_api' as const, targetKind: 'rain_catchment_mm', config: { url, station: 'WS-01', auth: { kind: 'none' as const }, format: { format: 'json' as const, time: 'd', value: 'v', timeFormat: 'iso', resolution: 'daily' as const } } };
+		expect(separateName(body, [], [])).toBe('Station WS-01');
+		expect(separateName({ ...body, config: { ...body.config, station: undefined } }, [], [])).toBe('Station station.example');
+	});
+
+	it('words the API’s warning as a note after the message', () => {
+		expect(warningText(undefined)).toBe('');
+		expect(warningText('the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key)')).toBe(
+			' Note: the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key).'
+		);
+		expect(warningText('already a sentence. ')).toBe(' Note: already a sentence.');
+	});
+
+	it('sends a key replacement and a clear through PATCH', async () => {
+		const calls: unknown[][] = [];
+		const api = { request: async (...a: unknown[]) => (calls.push(a), { feed: {} }) } as never;
+		await feedsApi(api, 'p1').update('f1', { credential: { secret: 'k' } });
+		await feedsApi(api, 'p1').update('f1', { credential: null });
+		expect(calls).toEqual([
+			['PATCH', '/projects/p1/feeds/f1', { credential: { secret: 'k' } }],
+			['PATCH', '/projects/p1/feeds/f1', { credential: null }]
+		]);
 	});
 });

@@ -177,6 +177,19 @@ variable "app_encryption_key" {
   }
 }
 
+variable "feed_credential_private_key" {
+  description = "The fetcher's X25519 private key, which opens the credentials of station API feeds (issue #784; backend/src/feeds/credential.ts; docs/security.md § Station API feeds). The fetcher only, in its runtime secret (secrets.tf), and only while station_api_feeds is on. sops key feed_credential_private_key; generate the pair with pnpm gen:feed-credential-key (its public half is feed_credential_public_key). Empty (the default) while station API feeds are off. Rotating it voids every saved station key: each owner enters theirs again (Replace key)."
+  type        = string
+  default     = ""
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    # 32 bytes, base64url without padding: 43 characters, the last carrying 4 bits.
+    condition     = var.feed_credential_private_key == "" || can(regex("^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$", var.feed_credential_private_key))
+    error_message = "feed_credential_private_key in prod.sops.yaml must be empty or a 32-byte base64url key (43 characters), as pnpm gen:feed-credential-key prints it."
+  }
+}
+
 variable "runtime_secret_version" {
   description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed; any change to this number writes every runtime secret again and cold-starts the API, worker and migrate Lambdas. Don't set it in a tfvars file: scripts/tf.sh derives it from prod.sops.yaml's sops.lastmodified (YYYYMMDDhhmmss), so every sops edit rotates, and refuses a var file that pins it. Pass -var runtime_secret_version=… only to force a rewrite of unchanged values (docs/deployment.md § Rotating a secret)."
   type        = number
@@ -760,6 +773,31 @@ variable "dws_source" {
   validation {
     condition     = contains(["live", "store"], var.dws_source)
     error_message = "dws_source must be live or store."
+  }
+}
+
+variable "station_api_feeds" {
+  description = "Let owners attach station API feeds: a rainfall station's data fetched from its provider's own web API (issue #784; docs/deployment.md § Station API feeds). On sets STATION_API_FEEDS=on on the API, the worker and the fetcher, passes feed_credential_public_key to the API (which seals each saved key with it), gives the fetcher its own runtime secret holding feed_credential_private_key (secrets.tf) with GetSecretValue on that secret alone, and keeps per-feed fetching on whatever chirps_source and dws_source say (feeds.tf local.per_feed_fetching): a station's own API can't be read from our copy. Both keys are then required. Off (the default) until the operator has generated the pair and a backend release with the feed is out."
+  type        = bool
+  default     = false
+  validation {
+    # Ephemeral values may appear in a validation; this only asks whether one is set.
+    condition     = !var.station_api_feeds || (var.feed_credential_public_key != "" && var.feed_credential_private_key != "")
+    error_message = "station_api_feeds needs feed_credential_public_key (prod.tfvars.sops) and feed_credential_private_key (prod.sops.yaml): generate the pair with pnpm gen:feed-credential-key (docs/deployment.md § Station API feeds)."
+  }
+}
+
+variable "feed_credential_public_key" {
+  description = "The public half of the fetcher's X25519 key (pnpm gen:feed-credential-key), which the API seals each station API feed's credential to (FEED_CREDENTIAL_PUBLIC_KEY; backend/src/feeds/credential.ts). Not a secret: it can seal, never open. The fetcher gets it too, to check at cold start that its private key pairs with it. Empty (the default) while station_api_feeds is off."
+  type        = string
+  default     = ""
+  validation {
+    condition = var.feed_credential_public_key == "" || (
+      can(regex("^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$", var.feed_credential_public_key)) &&
+      # The committed dev key (backend/.env.development), whose private half is in this public repo.
+      var.feed_credential_public_key != "g-xo1mrWk9kZ42VUSOO8eMbk5xQjlQ3GlXFzlFjcKCs"
+    )
+    error_message = "feed_credential_public_key must be empty or a 32-byte base64url key (43 characters) from pnpm gen:feed-credential-key, never the committed dev key."
   }
 }
 

@@ -829,8 +829,11 @@ alerts plug in as a further kind.
   queued seconds on; a chain due at once (the copy's backfill windows) it
   runs up to its job cap (`JOB_MAX_PER_TICK`; the e2e tick's `maxJobs`). `runTick({ projectIds })` claims
   only those projects' jobs: the e2e suite's tick (`worker.ts --once
-  --project <id>`), so parallel tests never run each other's jobs; the
-  worker Lambda and the local loop never pass it.
+  --project <id>`), so parallel tests never run each other's jobs; its feed
+  schedule queues only those projects' due feeds too, so a test's tick never
+  queues another test's new feed, which is due at once (it had left
+  station-api-feed.spec.ts's card showing a fetch nothing would run, issue
+  #784). The worker Lambda and the local loop never pass it.
 - **Each job runs as its acting user**, the member who queued it (an editor,
   or for `report_render` any viewer: `023_reports.sql` widens the job insert
   policy for that one kind): the worker
@@ -1154,7 +1157,86 @@ row names a source, where to read it and the series it merges into:
 | `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf_forecast.py`, below); no feed ever asks ECMWF |
 | `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS, or the catchment boundary's own 0.1° cells, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary, `…/feeds/agera5_et0/from-boundary`: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
+| `station_api` | A rainfall station's own web API (issue #784; Data → Data feeds → Attach a feed → Weather station (API), on while `STATION_API_FEEDS=on`): any HTTPS URL the owner types, a template with `{station}`, `{start}` and `{end}`, and a key sent as a bearer token, a named header, a query parameter or Basic | `rain_catchment_mm`, mm | Whatever the provider answers, described by the owner as an engine `StationFormat` (`@water-management/engine/station-format`): CSV or JSON, daily totals or sub-daily readings summed into rain days (08:00 to 08:00 by default), a time zone, a scale, missing markers. The same parser reads the attach card's "Try it on a sample", so the preview and the feed never read one answer two ways |
 
+- **A station API feed** (`station_api`, issue #784; `feeds/sources/station.ts`,
+  `feeds/stationHttp.ts`, `feeds/credential.ts`, `feeds/stationFixtures.ts`):
+  - *The window* (`fetch.ts` `stationWindow`): it ends on the newest rain day
+    the station can have finished (`stationLastDay`: yesterday in the
+    format's zone for daily totals, the last rain day whose end has passed
+    for sub-daily readings, never after UTC today), and the ingest counts a
+    feed caught up from the same function, so a caught-up feed queues no
+    other fetch. A first fetch starts on `startDate` or 90 days back. A
+    fetch makes at most `STATION_MAX_REQUESTS` (24) requests of
+    `maxDaysPerRequest` (default 31) days, one after another, at most about
+    one a second to a host (`hostPacer`, its own pacer, never CHC's). A longer
+    backfill walks a window at a time as DWS's does: a window that can't
+    reach the end starts the day after the newest day or the last day read
+    (`last_meta.through`), so days with no readings never loop; the window
+    that reaches the end re-reads `revisionDays` (default 7) before the
+    newest day. Readings from all the requests are merged (two answers
+    disagreeing about one reading fail the fetch) and summed into days over
+    the whole window, and only days that have ended are written. A running
+    total's day whose first reading has nothing before it to rise from is a
+    gap, so a re-read never writes a short total over a stored day. `{end}`
+    written as a time runs an hour past the window's last rain day (an API
+    that reads its end as exclusive would otherwise drop the reading stamped
+    there); readings past the window are ignored.
+  - *Request volume*: anyone with an account may point a feed at any URL, so
+    a backfill's windows chain ten minutes apart
+    (`STATION_BACKFILL_NEXT_SECONDS`, not CHIRPS's minute), and after three
+    windows in a row that wrote no day of rain (`STATION_EMPTY_WINDOWS_MAX`,
+    counted in `last_meta.emptyWindows`) the chain stops and the backfill goes
+    on at the daily fetch, its read position still moving. The worst case for
+    one feed is 24 requests a window × 144 chained windows a day = **3,456
+    requests a day**, reached only while every window holds rain (a real
+    record being backfilled, at most a 20-year start date's ~7,300 days, so
+    about two days at one day a request); over an empty answer it is 3
+    windows (72 requests) the first day and 24 a day after, plus any Run now
+    (rate limited per feed). A failing fetch
+    stops at its first failed request and retries on the scheduler's backoff
+    (15 minutes doubling, hours after a refused key).
+  - *The guard* (`stationHttp.ts`): the one feed path that asks a URL a
+    person typed, from a fetcher with open egress. https on port 443 only,
+    no `user:password@`; the host resolved at connect time and the whole
+    name refused when any of its addresses is loopback, private,
+    link-local (the metadata and Lambda runtime APIs), CGNAT, multicast,
+    reserved or an IPv6 form carrying one of those; IP literals checked
+    before the request; at most 3 redirects, all within the URL's own
+    origin (one to another site fails, naming that site, so the key is never
+    sent anywhere the owner didn't type); a 30 s deadline, an 8 MB cap, no
+    compression, the owner's extra headers validated. HTTP 401 or 403 is the
+    key refused (`FeedKeyRefusedError`): stored with `FEED_REFUSED_PREFIX`, so
+    the feed backs off for hours rather than locking the owner's account at
+    the provider. Messages never carry the URL's query, the key or an
+    answer's body; the key is scrubbed from anything that could have echoed
+    it, and an unexpected error is logged by name, code and stack frames
+    only (`fetch.ts` `fetchFailure`).
+  - *The key*: sealed by the API to the fetcher's public key
+    (X25519 + HKDF + AES-GCM, bound to the feed's id) and stored apart
+    (`data_feed_credential`, [data-model.md](./data-model.md)). The fetch
+    job carries the sealed bytes in the `FetchRequest` (`feedId`,
+    `credential`) unopened; only `runFetch` opens it, in the fetcher Lambda
+    (its runtime secret `FEED_CREDENTIAL_PRIVATE_KEY`, loaded at cold start)
+    or the local worker inline. A key needed but not saved, or one that won't
+    open, fails without asking the API (`FeedKeyError`, stored as "the
+    feed’s key can’t be used: …, Replace key"). In production a station feed
+    goes through the fetcher (`FEED_FETCHER=sqs`), in its own FIFO message
+    group per host (`station:<host>`), never CHC's or DWS's, and takes no
+    CHC slot. The fetcher logs a refused key as `key_refused` and a key
+    problem as `credential`, with fixed labels (`lambda-fetcher.ts`
+    `failureDetail`).
+  - *The fixtures* (`FEED_SOURCE=fixtures`): a synthetic station API on
+    `station.example`, answered in process through the real guarded client:
+    `/v1/daily.json` (JSON daily totals, `start`/`end` as YYYY-MM-DD),
+    `/v1/5min.csv` (5-minute readings, `from`/`to` in epoch seconds),
+    `/v1/keyed/daily.json` (only with the fixture key
+    `fixture-station-key-0001`, as a bearer token, `X-Api-Key`, `api_key` or
+    Basic user `fixture`), and `/v1/denied` (401), `/v1/moved` (a redirect to
+    another site), `/v1/loop`, `/v1/page` (HTML), `/v1/throttled` (429) for
+    the failures. Invented rain keyed to the date, so a feed attached today
+    shows recent days. Any other host fails, saying it needs
+    `FEED_SOURCE=live`.
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
   [maps.md § Rain for each unit](./maps.md#rain-for-each-unit)): one CHIRPS
   feed per land unit, its cells the unit's map parcel's (area weighted, as the
@@ -1679,12 +1761,19 @@ row names a source, where to read it and the series it merges into:
   publishes more often (CHIRPS daily at most, CHIRPS-GEFS one issue a day,
   verified DWS flow months behind), so the old hourly schedule only re-read
   the same days 24 times. Every tick lists the due feeds (`app_due_feeds`,
-  `SECURITY DEFINER`): enabled ones not scheduled within a day.
+  `SECURITY DEFINER`): enabled ones not scheduled within a day. The e2e
+  suite's tick scoped to its test's project (`worker.ts --once --project`)
+  lists only that project's due feeds, filtered in SQL before the limit
+  (its `p_projects`, 322), so no other spec's new feed gets a fetch queued
+  that nothing runs; production's tick lists every project's.
   A CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
   passed since it was last scheduled, since CHC publishes each issue around
   08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
   tick opens one transaction **as the feed's acting user** (the owner who
-  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`)
+  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`,
+  under a `FOR NO KEY UPDATE` row lock since 322: the `FOR UPDATE` it took
+  before deadlocked with a "Run now" that had queued its job first and then
+  checked the bucket's foreign key with `FOR KEY SHARE`, issue #784)
   and queues its `feed_fetch` under RLS, so the claim and the job commit
   together: a failure between them rolls the claim back and the next tick
   tries again, and one feed's failure doesn't hold up the rest (#32). A

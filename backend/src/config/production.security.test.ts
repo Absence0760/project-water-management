@@ -23,7 +23,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRuntime } from '../__tests__/lambdaRuntime.js';
-import { assertLambdaEnv, assertProductionEnv, productionEnvProblems, ROLES, type Role, SETTINGS } from './production.js';
+import { generateFeedCredentialKeys } from '../feeds/credential.js';
+import { assertLambdaEnv, assertProductionEnv, COMMITTED_FEED_CREDENTIAL_PUBLIC_KEYS, productionEnvProblems, ROLES, type Role, SETTINGS } from './production.js';
 import { RUNTIME_SECRETS } from './runtimeSecrets.js';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
@@ -59,10 +60,12 @@ const runtimeSecret = (role: string) => ({ RUNTIME_SECRET_ARN: SECRET_ARN(role),
 const pemPair = () =>
 	generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
 const SIGNING = pemPair();
+// The station API feeds' sealing pair (issue #784), generated per run as the operator does (pnpm gen:feed-credential-key).
+const FEED_KEYS = generateFeedCredentialKeys();
 const PROD_SECRETS: Record<Role, Record<string, string>> = {
 	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey, APP_ENCRYPTION_KEY: 'e'.repeat(64) },
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
-	fetcher: {},
+	fetcher: { FEED_CREDENTIAL_PRIVATE_KEY: FEED_KEYS.privateKey },
 	renderer: {},
 	migrate: { WATER_APP_PASSWORD: 'a1'.repeat(16) },
 	assistant: { DATABASE_URL: `${DB_URL}&application_name=assistant`, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48) }
@@ -88,6 +91,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		COPY_FINAL_LAG_DAYS: '75',
 		ET_OBSERVATIONS: 'off',
 		FUTURE_YIELD: 'off',
+		// Station API feeds on (the positive control covers the stricter side): the API seals with the public key.
+		STATION_API_FEEDS: 'on',
+		FEED_CREDENTIAL_PUBLIC_KEY: FEED_KEYS.publicKey,
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -110,10 +116,13 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		FEED_FETCHER: 'sqs',
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo'),
+		// Station API feeds' own queue (infra/feeds.tf, "Station fetches apart"), set while they are on, as here.
+		STATION_FETCH_REQUESTS_QUEUE_URL: SQS('station-fetch-requests.fifo'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
 		DWS_SOURCE: 'live',
 		DWS_WEEKLY: 'off',
+		STATION_API_FEEDS: 'on',
 		DAM_OBSERVATIONS: 'off',
 		DAM_OBSERVATIONS_S1: 'off',
 		ET_OBSERVATIONS: 'off',
@@ -136,6 +145,10 @@ const PROD: Record<Role, Record<string, string>> = {
 	},
 	// FEEDS_CONTACT: an address on a real domain (reserved ones are refused); the operator's own goes in their tfvars, never the repo.
 	fetcher: {
+		// Its runtime secret (the credential-opening key) only while station API feeds are on, as here (infra/secrets.tf).
+		...runtimeSecret('fetcher'),
+		STATION_API_FEEDS: 'on',
+		FEED_CREDENTIAL_PUBLIC_KEY: FEED_KEYS.publicKey,
 		FEED_SOURCE: 'live',
 		INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'),
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
@@ -195,6 +208,8 @@ const prod = (role: Role, patch: Record<string, string | undefined> = {}) => {
 	return env;
 };
 const problemNames = (role: Role, env: Record<string, string | undefined>) => productionEnvProblems(role, env).map((p) => p.split(' ')[0]);
+/** The fetcher as Terraform renders it with station API feeds off: no runtime secret, no key (infra/secrets.tf). */
+const FETCHER_STATION_OFF = { STATION_API_FEEDS: 'off', FEED_CREDENTIAL_PRIVATE_KEY: undefined, RUNTIME_SECRET_ARN: undefined, RUNTIME_SECRET_VERSION: undefined };
 
 /** Whether `name` must be set for `role` (its check refuses unset). */
 const requiredFor = (role: Role, name: string) => !!SETTINGS[name]?.checks?.[role]?.(undefined);
@@ -439,7 +454,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket',
 		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)',
 		WATER_URL: 'empty in the committed file: tracing a dam off, a valid production choice too (a local value is refused, as DEM_URL)',
-		ASSISTANT_PROVIDER: 'off in the committed file: the chat hidden, a valid choice on the API (its status says so); the assistant refuses it (the named local defaults below)'
+		ASSISTANT_PROVIDER: 'off in the committed file: the chat hidden, a valid choice on the API (its status says so); the assistant refuses it (the named local defaults below)',
+		STATION_API_FEEDS: 'on in the committed file: a real decision in both; on, production then demands the keys, and refuses the committed ones (FEED_CREDENTIAL_PUBLIC_KEY, FEED_CREDENTIAL_PRIVATE_KEY are swept here)'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {
@@ -675,7 +691,7 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 
 	// Issue #604 R3-C: per-feed fetching retires once CHIRPS reads the copy and DWS the store.
 	it('the worker hands fetches to the fetcher (FEED_FETCHER=sqs, with its queue) while any feed fetches per feed, and needs neither once none does', () => {
-		const cutover = { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'store' };
+		const cutover = { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'store', STATION_API_FEEDS: 'off' };
 		// Per-feed fetching on (either flag on the old value): FEED_FETCHER=sqs is required, and so is its queue.
 		for (const flags of [{ CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'live' }, { CHIRPS_SOURCE: 'chc', DWS_SOURCE: 'store' }]) {
 			const label = JSON.stringify(flags);
@@ -690,9 +706,63 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		// ...but never inline, and a queue URL set is still checked.
 		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: 'inline', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FEED_FETCHER');
 		expect(problemNames('worker', prod('worker', { ...cutover, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('FETCH_REQUESTS_QUEUE_URL');
-		// The fetcher answers on ingest-results only while the queues exist: unset is fine, a local URL is not.
-		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: undefined }))).toEqual([]);
+		// The fetcher answers on ingest-results only while the queues exist: unset is fine (without station API feeds), a local URL is not.
+		expect(problemNames('fetcher', prod('fetcher', { ...FETCHER_STATION_OFF, INGEST_RESULTS_QUEUE_URL: undefined }))).toEqual([]);
 		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('INGEST_RESULTS_QUEUE_URL');
+	});
+
+	// Issue #784: a station's own API can't be read from our copy, so station API feeds keep per-feed fetching on.
+	it('station API feeds keep the per-feed fetcher after the cutover: the worker hands fetches on, and the fetcher answers', () => {
+		const cutover = { CHIRPS_SOURCE: 'mirror', DWS_SOURCE: 'store' };
+		for (const v of [undefined, '', 'inline']) expect(problemNames('worker', prod('worker', { ...cutover, STATION_API_FEEDS: 'on', FEED_FETCHER: v })), String(v)).toContain('FEED_FETCHER');
+		expect(problemNames('worker', prod('worker', { ...cutover, STATION_API_FEEDS: 'on', FETCH_REQUESTS_QUEUE_URL: undefined }))).toContain('FETCH_REQUESTS_QUEUE_URL');
+		expect(problemNames('worker', prod('worker', { ...cutover, STATION_API_FEEDS: 'on' }))).toEqual([]); // positive control
+		for (const v of [undefined, '', 'off']) expect(problemNames('worker', prod('worker', { ...cutover, STATION_API_FEEDS: v, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: undefined })), String(v)).toEqual([]);
+		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: undefined }))).toContain('INGEST_RESULTS_QUEUE_URL');
+		for (const role of ['api', 'worker', 'fetcher'] as const) expect(problemNames(role, prod(role, { STATION_API_FEEDS: 'yes' })), role).toContain('STATION_API_FEEDS');
+	});
+
+	// Issue #784 re-audit: station fetches have their own queue and fetcher trigger, so slow station hosts can't take CHIRPS's and DWS's.
+	it('the worker sends station API fetches to their own queue: required while on, never the shared fetch-requests queue', () => {
+		for (const v of [undefined, '', 'http://localhost:9324/q', 'not a url'])
+			expect(problemNames('worker', prod('worker', { STATION_FETCH_REQUESTS_QUEUE_URL: v })), String(v)).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
+		expect(problemNames('worker', prod('worker', { STATION_FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo') }))).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
+		expect(problemNames('worker', prod('worker'))).toEqual([]); // positive control: its own queue
+		// Off: Terraform sets none, and none is needed; one set is still checked.
+		for (const v of [undefined, '']) expect(problemNames('worker', prod('worker', { STATION_API_FEEDS: 'off', STATION_FETCH_REQUESTS_QUEUE_URL: v })), String(v)).toEqual([]);
+		expect(problemNames('worker', prod('worker', { STATION_API_FEEDS: 'off', STATION_FETCH_REQUESTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
+	});
+
+	it('only the fetcher holds the key that opens station API credentials, and only while they are on', () => {
+		// On: the fetcher needs its runtime secret and the key, of the right shape, never the committed dev key.
+		for (const name of ['FEED_CREDENTIAL_PRIVATE_KEY', 'RUNTIME_SECRET_ARN', 'RUNTIME_SECRET_VERSION', 'FEED_CREDENTIAL_PUBLIC_KEY'])
+			expect(problemNames('fetcher', prod('fetcher', { [name]: undefined })), name).toContain(name);
+		const dev = new Map(devEnv());
+		for (const v of [dev.get('FEED_CREDENTIAL_PRIVATE_KEY'), 'short', `${FEED_KEYS.privateKey}=`, FEED_KEYS.privateKey.slice(0, 42) + 'B', 'k'.repeat(64)])
+			expect(problemNames('fetcher', prod('fetcher', { FEED_CREDENTIAL_PRIVATE_KEY: v })), String(v)).toContain('FEED_CREDENTIAL_PRIVATE_KEY');
+		// Off: no secret at all, and a key set anyway is refused (no Lambda holds a secret it doesn't use).
+		expect(problemNames('fetcher', prod('fetcher', FETCHER_STATION_OFF))).toEqual([]);
+		expect(problemNames('fetcher', prod('fetcher', { ...FETCHER_STATION_OFF, FEED_CREDENTIAL_PRIVATE_KEY: FEED_KEYS.privateKey }))).toContain('FEED_CREDENTIAL_PRIVATE_KEY');
+		// The worker forwards credentials sealed and the API only seals: neither may hold the private key, on or off.
+		for (const role of ['api', 'worker'] as const)
+			for (const station of ['on', 'off']) expect(problemNames(role, prod(role, { STATION_API_FEEDS: station, FEED_CREDENTIAL_PRIVATE_KEY: FEED_KEYS.privateKey })), `${role} ${station}`).toContain('FEED_CREDENTIAL_PRIVATE_KEY');
+		// The API: the public key required while on, checked when set while off.
+		for (const v of [undefined, '', dev.get('FEED_CREDENTIAL_PUBLIC_KEY'), 'not-a-key'])
+			expect(problemNames('api', prod('api', { FEED_CREDENTIAL_PUBLIC_KEY: v })), String(v)).toContain('FEED_CREDENTIAL_PUBLIC_KEY');
+		expect(problemNames('api', prod('api', { STATION_API_FEEDS: 'off', FEED_CREDENTIAL_PUBLIC_KEY: '' }))).toEqual([]);
+		expect(problemNames('api', prod('api', { STATION_API_FEEDS: undefined, FEED_CREDENTIAL_PUBLIC_KEY: undefined }))).toEqual([]);
+		expect(problemNames('api', prod('api', { STATION_API_FEEDS: 'off', FEED_CREDENTIAL_PUBLIC_KEY: dev.get('FEED_CREDENTIAL_PUBLIC_KEY') }))).toContain('FEED_CREDENTIAL_PUBLIC_KEY');
+	});
+
+	it('the committed public keys production refuses are the public halves of the committed private keys', async () => {
+		const { createPrivateKey, createPublicKey } = await import('node:crypto');
+		const pkcs8 = Buffer.from('302e020100300506032b656e04220420', 'hex'); // RFC 8410, as feeds/credential.ts
+		const publicOf = (priv: string) =>
+			Buffer.from(createPublicKey(createPrivateKey({ key: Buffer.concat([pkcs8, Buffer.from(priv, 'base64url')]), format: 'der', type: 'pkcs8' })).export({ format: 'der', type: 'spki' }).subarray(12)).toString('base64url');
+		const committed = devEnv().filter(([name]) => name === 'FEED_CREDENTIAL_PRIVATE_KEY').map(([, v]) => publicOf(v));
+		expect(committed.length).toBeGreaterThan(0);
+		expect([...COMMITTED_FEED_CREDENTIAL_PUBLIC_KEYS].sort()).toEqual([...new Set(committed)].sort());
+		expect(publicOf(FEED_KEYS.privateKey)).toBe(FEED_KEYS.publicKey); // positive control for publicOf
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {

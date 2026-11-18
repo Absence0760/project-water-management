@@ -219,7 +219,9 @@ export interface TickOptions {
 	 * Claim only these projects' jobs (the e2e suite's tick, `worker.ts --once
 	 * --project <id>`, so one test's tick never runs another's job). Unset in
 	 * production: the worker Lambda and the local loop claim every project's.
-	 * The purges, the schedules and the alert sends stay global either way.
+	 * The feed schedule queues only these projects' feeds too (a test's tick
+	 * left another test's new feed with a fetch nothing would run, issue #784);
+	 * the purges, the report and alert schedules and the alert sends stay global.
 	 */
 	projectIds?: readonly string[];
 }
@@ -347,7 +349,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		result.dams = await runDamsTick();
 		// Observed actual ET: publish each unit's parcels, load what the WaPOR pass fetched (issue #623); never throws.
 		result.et = await runEtTick();
-		result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
+		result.feeds = await scheduleDueFeeds({ all: o.allFeeds, projectIds: o.projectIds });
 	}
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
 	let alertsScheduled = 0;
