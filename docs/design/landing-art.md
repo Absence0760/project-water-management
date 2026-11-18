@@ -231,7 +231,8 @@ that contradicts itself.
     requests, 238 KB; desktop 100 / 100 / 100 / 100, LCP 0.43 s. The page had
     grown since the first baseline (161 KB), so LCP is now just under the
     bar: `pnpm check:bundle`'s `landingFirstLoadKb` (welcome.html with its
-    CSS and every module it preloads, 115 KB against a 120 KB ceiling) keeps
+    CSS and every module it preloads, 115 KB then against a 120 KB ceiling,
+    which reached 120 by 2026-11 and became 121 with SvelteKit 3.2.0, #803) keeps
     a static import from quietly bringing that weight back.
   - Fixed on the way: the LCP element was the 5 % contour texture (a CSS
     mask, above), not the render, which is why preloading the render and

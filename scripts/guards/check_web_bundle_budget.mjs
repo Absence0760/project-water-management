@@ -144,7 +144,8 @@ export const BUDGET = Object.freeze({
 	largestAssetKb: 100,
 	landingKb: 25,
 	// Measured 2026-10-25 (issue #92): 115 KB, welcome.html 25 KB with its inlined CSS + 41 preloaded modules 90 KB.
-	landingFirstLoadKb: 120,
+	// 121 from Dependabot #803 (2026-11-18): main measured 122 877 B against 122 880 (3 B of headroom); @sveltejs/kit 3.2.0's runtime adds 171 B. No new import reaches the landing.
+	landingFirstLoadKb: 121,
 	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).
 	// 440 from maplibre-gl 6.14 (#570): its worker is self-contained since 6.13 and now counts here (bundle-budget/README.md).
 	// 450 from maplibre-gl 6.15 (#586, Dependabot #599): custom projections and CRS support grew both halves (bundle-budget/README.md).
