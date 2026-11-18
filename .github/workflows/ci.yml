@@ -694,7 +694,8 @@ jobs:
   # trip: Python writes the copy, Node's backend/src/mirror/ reads it bit for
   # bit (test_roundtrip.py, through tsx from the pnpm install;
   # INGEST_REQUIRE_NODE makes it fail rather than skip without one). Python
-  # 3.14 with the hash-pinned requirements the Lambda image installs.
+  # 3.15, the Lambda image's (ingest/Dockerfile), with the hash-pinned
+  # requirements the image installs; move both together.
   ingest:
     name: Bulk ingest (Python)
     needs: changes
@@ -721,7 +722,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       - name: Install the pinned dependencies
         run: python -m pip install --require-hashes -r ingest/requirements.txt

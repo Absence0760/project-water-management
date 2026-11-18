@@ -1605,7 +1605,7 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   `ecmwf/<issue>/`, `era5l/` and `imerg_late/`), each with its
   `manifest.json`, and `gefs/index.json` and `ecmwf/index.json` listing the
   forecast issues held.
-- **The ingest job** `water-management-mirror-ingest`: a Python 3.14
+- **The ingest job** `water-management-mirror-ingest`: a Python 3.15
   container-image Lambda (`ingest/Dockerfile`, handler
   `lambda_handler.handler`), arm64, 3 GB memory, 2 GB of `/tmp`, 900 s,
   reserved concurrency 2, **outside the VPC** (it reaches CHC over the
@@ -2672,10 +2672,10 @@ The operator, once:
    then replace the model or pin its variant in `ingest/cmip6_delta.py`
    `MODELS` **and** in docs/data-sources.md § nex-gddp-cmip6, through a PR.
 2. **Open CloudShell in us-west-2** (the console's region picker, then the
-   CloudShell icon) and get the checkout and Python 3.14 (CloudShell's own
+   CloudShell icon) and get the checkout and Python 3.15 (CloudShell's own
    Python is older). uv's installer is a shell script from astral.sh that
    puts `uv` in `~/.local/bin`; read it first if you prefer:
-   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/jaredhoward-dev/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.14 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
+   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/jaredhoward-dev/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.15 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
    (in `/tmp`, since the home directory holds 1 GB).
 3. **Copy one model at a time:**
    `cd /tmp/wm && AWS_REGION=af-south-1 AWS_DEFAULT_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 copy --source s3 --models ACCESS-CM2`

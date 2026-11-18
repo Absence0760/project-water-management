@@ -13,7 +13,7 @@
 #   mirror-ingest --PutMetricData--> <project>/Mirror MirrorLagDays{Product}
 #   worker --GetObject/ListBucket (S3 interface endpoint)--> the mirror
 #
-# The job is a Python 3.14 CONTAINER IMAGE (ingest/Dockerfile, arm64: NetCDF
+# The job is a Python 3.15 CONTAINER IMAGE (ingest/Dockerfile, arm64: NetCDF
 # needs h5py/xarray, which Node has no reader for), in its own ECR
 # repository, like the report renderer (reports.tf): immutable tags, created
 # only once its first image is in ECR (ingest_image_tag), and moved to each
