@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Main after #807 (12 minor/patch bumps) and #780 (combined rounds of 2026-11-10) both merged: each passed CI alone, but together CI measured 2509 KB against the 2508 KB ceiling (run 44413081318 on 5d9f3f6de)."
+}
